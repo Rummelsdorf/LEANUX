@@ -1,0 +1,21 @@
+# Build outputs
+build-output/
+sysroot/
+sources/
+tools/diet/
+
+# Local test artifacts
+*.o
+*.a
+*.so
+*.so.*
+*.dylib
+*.exe
+*.iso
+*.img
+*.squashfs
+
+# Editor/OS noise
+.DS_Store
+*~
+*.swp

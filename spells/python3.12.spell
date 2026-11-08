@@ -1,0 +1,28 @@
+# Python 3.12 – interpreter
+PACKAGE_NAME="python3.12"
+PACKAGE_VERSION="3.12.0"
+PACKAGE_RELEASE="1"
+
+DEPENDENCIES=()
+# These are host-provided for the first bootstrap. Add spells to remove them.
+EXTERNAL_DEPENDENCIES=("bzip2" "gzip" "xz" "zlib" "openssl" "libffi" "readline")
+
+SOURCE_URL="https://www.python.org/ftp/python/3.12.0/Python-3.12.0.tgz"
+SOURCE_HASH="PLACEHOLDER_HASH"
+
+BUILD_STYLE="configure"
+LANGUAGE="c"
+FALLBACK_ALLOWED=1
+
+build() {
+    log "Configuring Python with $CC"
+    ./configure \
+        --prefix=/usr \
+        --enable-optimizations \
+        --without-ensurepip \
+        CC="$CC" \
+        CFLAGS="${CFLAGS:-}" \
+        LDFLAGS="${LDFLAGS:-}"
+    make -j"${JOBS:-$(nproc)}"
+    make DESTDIR="$DESTDIR" install
+}

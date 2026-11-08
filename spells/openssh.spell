@@ -1,0 +1,29 @@
+# OpenSSH – server and client
+PACKAGE_NAME="openssh"
+PACKAGE_VERSION="9.5p1"
+PACKAGE_RELEASE="1"
+
+DEPENDENCIES=("zlib")
+# OpenSSL and PAM are host-provided until their spells exist.
+EXTERNAL_DEPENDENCIES=("libssl" "libcrypto" "pam")
+
+SOURCE_URL="https://cdn.openbsd.org/pub/OpenSSH/openssh-9.5p1.tar.gz"
+SOURCE_HASH="PLACEHOLDER_HASH"
+
+BUILD_STYLE="configure"
+LANGUAGE="c"
+FALLBACK_ALLOWED=1
+
+build() {
+    log "Configuring OpenSSH with $CC"
+    ./configure \
+        --prefix=/usr \
+        --sysconfdir=/etc/ssh \
+        --with-ssl-dir=/usr \
+        --without-zlib-version-check \
+        CC="$CC" \
+        CFLAGS="${CFLAGS:-}" \
+        LDFLAGS="${LDFLAGS:-}"
+    make -j"${JOBS:-$(nproc)}"
+    make DESTDIR="$DESTDIR" install
+}

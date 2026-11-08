@@ -1,0 +1,21 @@
+# Test spell A – no dependencies
+PACKAGE_NAME="test_a"
+PACKAGE_VERSION="1.0"
+PACKAGE_RELEASE="1"
+
+DEPENDENCIES=()
+EXTERNAL_DEPENDENCIES=()
+SOURCE_URL=""
+SOURCE_HASH=""
+
+BUILD_STYLE="none"
+LANGUAGE="c"
+FALLBACK_ALLOWED=0
+
+build() {
+    log "Building $PACKAGE_NAME"
+}
+
+install() {
+    log "Installing $PACKAGE_NAME"
+}

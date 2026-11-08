@@ -1,0 +1,19 @@
+# Source lock file.
+# Every package must be pinned to an upstream release and a SHA-256 hash
+# before it can be verified. dietlibc is the base C library for LEANUX.
+
+[[source]]
+name = "dietlibc"
+version = "0.35"
+url = "https://web.archive.org/web/20260714135754/https://www.fefe.de/dietlibc/dietlibc-0.35.tar.xz"
+sha256 = "5aa5599039ae58bba7b4a1566fc453485cd1a155a20b313e15cd1bd0e19c0beb"
+
+[[source]]
+name = "zlib"
+version = "1.3.1"
+url = "https://zlib.net/fossils/zlib-1.3.1.tar.gz"
+sha256 = "9a93b2b7dfdac77ceba5a558a580e74667dd6fede4585b91eefb60f03b72df23"
+
+# binutils and linux are intentionally absent until their release versions,
+# URLs, and SHA-256 hashes are pinned. Add them here before enabling
+# reproducible kernel/toolchain builds.

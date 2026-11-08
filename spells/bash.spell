@@ -1,0 +1,28 @@
+# Bash – GNU shell
+PACKAGE_NAME="bash"
+PACKAGE_VERSION="5.2"
+PACKAGE_RELEASE="1"
+
+DEPENDENCIES=()
+# readline/iconv are provided by the host until their spells exist.
+EXTERNAL_DEPENDENCIES=("readline" "libiconv")
+
+SOURCE_URL="https://ftp.gnu.org/gnu/bash/bash-5.2.tar.gz"
+SOURCE_HASH="PLACEHOLDER_HASH"
+
+BUILD_STYLE="configure"
+LANGUAGE="c"
+FALLBACK_ALLOWED=1
+
+build() {
+    log "Configuring bash with $CC"
+    ./configure \
+        --prefix=/usr \
+        --without-bash-malloc \
+        --enable-static-link \
+        CC="$CC" \
+        CFLAGS="${CFLAGS:-}" \
+        LDFLAGS="${LDFLAGS:-}"
+    make -j"${JOBS:-$(nproc)}"
+    make DESTDIR="$DESTDIR" install
+}

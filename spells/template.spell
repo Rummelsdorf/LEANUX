@@ -1,0 +1,65 @@
+# Template Spell for LEANUX distribution
+# Copy this file to create new spells
+
+PACKAGE_NAME="<package-name>"
+PACKAGE_VERSION="<version>"
+PACKAGE_RELEASE="1"
+
+# Dependencies - list other spells that must be built first
+DEPENDENCIES=("dependency1" "dependency2")
+
+# Source information
+SOURCE_URL="https://example.com/source-${PACKAGE_VERSION}.tar.gz"
+SOURCE_HASH="PLACEHOLDER_HASH"
+
+# Build style: configure, cmake, makefile
+BUILD_STYLE="configure"
+
+# Build function - customize for your package
+build() {
+    log "Building ${PACKAGE_NAME} ${PACKAGE_VERSION} with dietlibc"
+    
+    case "${BUILD_STYLE}" in
+        configure)
+            ./configure \
+                --prefix="/usr" \
+                --enable-static \
+                --disable-shared \
+                CC="dietgcc" \
+                CFLAGS="-O2 -static -march=x86-64"
+            make -j"$(nproc)"
+            make DESTDIR="$STAGING_DIR" install
+            ;;
+        cmake)
+            mkdir -p build && cd build
+            cmake .. -DCMAKE_C_FLAGS="-O2 -static -march=x86-64" -DCMAKE_INSTALL_PREFIX="/usr"
+            make -j"$(nproc)"
+            make DESTDIR="$STAGING_DIR" install
+            ;;
+        makefile)
+            make CC="dietgcc" CFLAGS="-O2 -static -march=x86-64" -j"$(nproc)"
+            make DESTDIR="$STAGING_DIR" install
+            ;;
+        *)
+            error "Unknown build style: ${BUILD_STYLE}"
+            ;;
+    esac
+}
+
+# Install function - customize for your package
+install() {
+    # Example: install binaries, libraries, docs
+    install -Dm755 myprogram "$STAGING_DIR/usr/bin/myprogram"
+    install -Dm644 myprogram.1 "$STAGING_DIR/usr/share/man/man1/myprogram.1"
+}
+
+# Check for dietlibc symbol availability
+check_dietlibc_symbols() {
+    # Add symbols your package requires
+    local required=("malloc" "free" "printf" "scanf")
+    for sym in "${required[@]}"; do
+        if ! dietlibc-check "$sym"; then
+            log "WARNING: Symbol $sym not available in dietlibc"
+        fi
+    done
+}

@@ -1,0 +1,44 @@
+[project]
+name = "LEANUX"
+codename = "development"
+version = "0.1.0"
+release = "1"
+
+[architecture]
+target = "x86_64-leanux-linux-gnu"
+arch = "x86_64"
+vendor = "RummelsdorfLabs"
+kernel = "linux"
+
+[toolchain]
+# dietlibc is the default and preferred C library for every package.
+compiler = "dietgcc"
+linker = "dietgcc"
+libc = "dietlibc"
+libc_prefix = "tools/diet"
+# Standard libc is only used when dietlibc lacks a required interface and the
+# spell explicitly sets FALLBACK_ALLOWED=1.
+fallback_libc = "glibc"
+cxx_runtime = "libstdc++ (fallback only)"
+
+[system]
+init = "systemd"
+shell = "bash"
+coreutils = "gnu"
+filesystem = "ext4"
+
+[build]
+jobs = 4
+source_directory = "sources"
+output_directory = "build-output"
+sysroot_directory = "sysroot"
+staging_directory = "sysroot/install"
+
+[security]
+verify_source_hashes = true
+signed_packages = true
+reproducible_builds = true
+
+[release]
+channel = "development"
+architecture = "x86_64"

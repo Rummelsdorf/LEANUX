@@ -1,0 +1,26 @@
+# tmux – terminal multiplexer
+PACKAGE_NAME="tmux"
+PACKAGE_VERSION="3.4"
+PACKAGE_RELEASE="1"
+
+DEPENDENCIES=()
+EXTERNAL_DEPENDENCIES=("libevent" "libncurses" "libreadline")
+
+SOURCE_URL="https://github.com/tmux/tmux/releases/download/3.4/tmux-3.4.tar.gz"
+SOURCE_HASH="PLACEHOLDER_HASH"
+
+BUILD_STYLE="configure"
+LANGUAGE="c"
+FALLBACK_ALLOWED=1
+
+build() {
+    log "Configuring tmux with $CC"
+    ./configure \
+        --prefix=/usr \
+        --enable-static \
+        CC="$CC" \
+        CFLAGS="${CFLAGS:-}" \
+        LDFLAGS="${LDFLAGS:-}"
+    make -j"${JOBS:-$(nproc)}"
+    make DESTDIR="$DESTDIR" install
+}

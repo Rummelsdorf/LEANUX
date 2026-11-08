@@ -1,0 +1,28 @@
+# llama.cpp – LLM inference (C++)
+PACKAGE_NAME="llama.cpp"
+PACKAGE_VERSION="b4000"
+PACKAGE_RELEASE="1"
+
+DEPENDENCIES=()
+EXTERNAL_DEPENDENCIES=("python3" "cmake" "g++")
+
+SOURCE_URL="https://github.com/ggerganov/llama.cpp/archive/refs/tags/b4000.tar.gz"
+SOURCE_HASH="PLACEHOLDER_HASH"
+
+BUILD_STYLE="cmake"
+LANGUAGE="c++"
+# dietlibc has no C++ standard library; this spell is expected to use the
+# standard-libc fallback for the C++ runtime.
+FALLBACK_ALLOWED=1
+
+build() {
+    log "Configuring llama.cpp with CMake (CXX=$CXX)"
+    cmake -S . -B build \
+        -DCMAKE_BUILD_TYPE=Release \
+        -DLLAMA_CURL=OFF \
+        -DCMAKE_C_COMPILER="$CC" \
+        -DCMAKE_CXX_COMPILER="${CXX:-g++}" \
+        -DCMAKE_INSTALL_PREFIX=/usr
+    cmake --build build -j"${JOBS:-$(nproc)}"
+    DESTDIR="$DESTDIR" cmake --install build
+}
