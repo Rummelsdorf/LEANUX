@@ -7,7 +7,7 @@ PACKAGE_RELEASE="1"
 DEPENDENCIES=("glib" "libpng" "zlib")
 EXTERNAL_DEPENDENCIES=()
 SOURCE_URL="https://download.gnome.org/sources/gdk-pixbuf/2.42/gdk-pixbuf-2.42.12.tar.xz"
-SOURCE_HASH="PLACEHOLDER_HASH"
+SOURCE_HASH="b9505b3445b9a7e48ced34760c3bcb73e966df3ac94c95a148cb669ab748e3c7"
 
 BUILD_STYLE="meson"
 LANGUAGE="c"
@@ -21,7 +21,7 @@ build() {
         --libdir=lib \
         --buildtype=release \
         --default-library=static \
-        -Dintrospection=false \
+        -Dintrospection=disabled \
         -Ddocs=false \
         -Dman=false \
         -Dtests=false \

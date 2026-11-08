@@ -283,7 +283,23 @@ rewrite_pkgconfig() {
         # Prefix every absolute install directory with the stage. Variables
         # that already use ${prefix} are left alone and resolve correctly.
         sed -i -E "s#^(prefix|exec_prefix|libdir|includedir|bindir|sbindir|libexecdir|datadir|sysconfdir|sharedstatedir|localstatedir|infodir|mandir|docdir|dvidir|htmldir|pdfdir|psdir|runstatedir)=/#\1=$stage/#" "$pc"
+        # Also redirect -L/-I flags that some .pc files spell out absolutely.
+        sed -i -E "s#-L/usr/lib64#-L$stage/usr/lib64#g; s#-L/usr/lib#-L$stage/usr/lib#g; s#-I/usr/include#-I$stage/usr/include#g" "$pc"
     done < <(find "$stage" -type f -name '*.pc' -print0)
+}
+
+# Libtool archives produced against host libraries contain absolute paths such
+# as /usr/lib/libpng16.la. Those do not exist in the staging tree and make
+# dependent libtool links fail. Reduce them to plain -l flags so the staged
+# -L search path decides which library is used.
+rewrite_libtool_archives() {
+    local stage="$1"
+    [ -d "$stage" ] || return 0
+    local la
+    while IFS= read -r -d '' la; do
+        sed -i -E 's#(^| )/usr/(local/)?lib(64)?/lib([^/ ]+)\.la#\1-l\4#g' "$la"
+        sed -i -E "s#^libdir=.*#libdir='$stage/usr/lib'#" "$la"
+    done < <(find "$stage" -type f -name '*.la' -print0)
 }
 
 # ---------------------------------------------------------------------------
@@ -338,7 +354,7 @@ build_package() {
         export DESTDIR="$stage"
         export STAGING_DIR="$stage"
         export DIETHOME="$DIET_PREFIX"
-        export PATH="$DIET_PREFIX/bin:$PATH"
+        export PATH="$DIET_PREFIX/bin:$LEANUX_ROOT/tools/host/bin:$PATH"
         export MAKEFLAGS="-j$JOBS"
 
         # Build the dependency search paths once. Every dep is installed into
@@ -391,17 +407,29 @@ build_package() {
             if [ "$LANGUAGE" = "c++" ]; then
                 export CXX="${CXX:-g++}"
             fi
+            # build() and install() are invoked below from a dedicated
+            # errexit subshell (see run_build), so their failures propagate.
             if declare -F build >/dev/null; then
-                build || return $?
+                build
             else
                 die "$pkg has no build() function"
             fi
             if declare -F install >/dev/null; then
-                install || return $?
+                install
             fi
         }
 
-        if build_with "$DIETGCC"; then
+        # A function called directly in an `if` condition loses errexit.
+        # Isolate the call so a failed compile is never reported as success.
+        run_build() {
+            ( set -e; build_with "$1" )
+        }
+
+        set +e
+        run_build "$DIETGCC"
+        local build_rc=$?
+        set -e
+        if [ "$build_rc" -eq 0 ]; then
             log "$pkg built with dietlibc"
         else
             if [ "${FALLBACK_ALLOWED:-0}" = "1" ]; then
@@ -413,7 +441,11 @@ build_package() {
                     extract_source "$archive" "$builddir/src"
                     cd "$builddir/src"
                 fi
-                build_with "gcc"
+                set +e
+                run_build "gcc"
+                local fallback_rc=$?
+                set -e
+                [ "$fallback_rc" -eq 0 ] || die "$pkg failed with standard libc fallback"
                 log "$pkg built with standard libc fallback"
             else
                 die "$pkg failed with dietlibc and FALLBACK_ALLOWED is not set"
@@ -421,6 +453,7 @@ build_package() {
         fi
 
         rewrite_pkgconfig "$stage"
+        rewrite_libtool_archives "$stage"
         touch "$stage/.built"
     )
 }

@@ -4,7 +4,7 @@ PACKAGE_NAME="dbus"
 PACKAGE_VERSION="1.14.10"
 PACKAGE_RELEASE="1"
 
-DEPENDENCIES=("glib")
+DEPENDENCIES=("glib" "expat")
 EXTERNAL_DEPENDENCIES=()
 SOURCE_URL="https://dbus.freedesktop.org/releases/dbus/dbus-1.14.10.tar.xz"
 SOURCE_HASH="ba1f21d2bd9d339da2d4aa8780c09df32fea87998b73da24f49ab9df1e36a50f"
@@ -16,6 +16,7 @@ USE_DIETCOMPAT=1
 
 build() {
     log "Configuring ${PACKAGE_NAME} with $CC"
+    export CFLAGS="${CFLAGS:-} -D_BSD_SOURCE -DPTHREAD_MUTEX_RECURSIVE=PTHREAD_MUTEX_RECURSIVE_NP"
     THREAD_LIBS="-lpthread -ldietcompat" \
     ./configure \
         --prefix=/usr \

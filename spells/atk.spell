@@ -21,7 +21,7 @@ build() {
         --libdir=lib \
         --buildtype=release \
         --default-library=static \
-        -Dintrospection=false \
+        -Dintrospection=disabled \
         -Ddocs=false \
         || { cat build/meson-logs/meson-log.txt 2>/dev/null; return 1; }
     ninja -C build

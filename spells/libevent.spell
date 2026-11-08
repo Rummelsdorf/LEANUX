@@ -16,6 +16,7 @@ USE_DIETCOMPAT=1
 
 build() {
     log "Configuring ${PACKAGE_NAME} with $CC"
+    export CFLAGS="${CFLAGS:-} -D_BSD_SOURCE -DPTHREAD_MUTEX_RECURSIVE=PTHREAD_MUTEX_RECURSIVE_NP"
     LIBS="-lpthread" \
     ./configure \
         --prefix=/usr \

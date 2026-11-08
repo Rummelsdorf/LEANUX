@@ -22,8 +22,8 @@ build() {
         --buildtype=release \
         --default-library=static \
         -Ddemos=false \
-        -Dbuild-tests=false \
-        -Dintrospection=false \
+        -Dtests=false \
+        -Dintrospection=disabled \
         -Dcolord=no \
         -Dwayland-backend=false \
         -Dx11-backend=true \

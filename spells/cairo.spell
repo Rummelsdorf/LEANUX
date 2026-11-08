@@ -25,7 +25,10 @@ build() {
         -Dglib=enabled \
         -Dpng=enabled \
         -Dzlib=enabled \
+        -Dxlib=disabled \
+        -Dxcb=disabled \
         -Dgtk_doc=false \
+        -Dc_args='-D_BSD_SOURCE -DPTHREAD_MUTEX_RECURSIVE=PTHREAD_MUTEX_RECURSIVE_NP' \
         || { cat build/meson-logs/meson-log.txt 2>/dev/null; return 1; }
     ninja -C build src/libcairo.a
     install -d "$DESTDIR/usr/lib" "$DESTDIR/usr/include/cairo"

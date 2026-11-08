@@ -7,7 +7,7 @@ PACKAGE_RELEASE="1"
 DEPENDENCIES=("glib" "cairo" "harfbuzz" "freetype" "fontconfig")
 EXTERNAL_DEPENDENCIES=()
 SOURCE_URL="https://download.gnome.org/sources/pango/1.54/pango-1.54.0.tar.xz"
-SOURCE_HASH="PLACEHOLDER_HASH"
+SOURCE_HASH="8a9eed75021ee734d7fc0fdf3a65c3bba51dfefe4ae51a9b414a60c70b2d1ed8"
 
 BUILD_STYLE="meson"
 LANGUAGE="c"
@@ -21,9 +21,9 @@ build() {
         --libdir=lib \
         --buildtype=release \
         --default-library=static \
-        -Dintrospection=false \
+        -Dintrospection=disabled \
         -Ddocumentation=false \
-        -Dbuild-tests=false \
+        -Dbuild-testsuite=false \
         -Dcairo=enabled \
         -Dfontconfig=enabled \
         -Dfreetype=enabled \

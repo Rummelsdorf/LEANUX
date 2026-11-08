@@ -16,6 +16,7 @@ USE_DIETCOMPAT=1
 
 build() {
     log "Configuring ${PACKAGE_NAME} with $CC"
+    export CFLAGS="${CFLAGS:-} -D_BSD_SOURCE -include stdbool.h"
     ./configure \
         --prefix=/usr \
         --build="$(gcc -dumpmachine)" \

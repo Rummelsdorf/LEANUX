@@ -3,6 +3,7 @@ build-output/
 sysroot/
 sources/
 tools/diet/
+tools/host/
 
 # Local test artifacts
 *.o

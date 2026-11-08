@@ -43,11 +43,11 @@ DEPS: dict[str, list[str]] = {
     "libffi": [],
     "pcre2": [],
     "glib": ["zlib", "libffi", "pcre2"],
-    "dbus": ["glib"],
+    "dbus": ["glib", "expat"],
     "expat": [],
     "libpng": ["zlib"],
     "harfbuzz": [],
-    "freetype": ["zlib", "harfbuzz", "libpng"],
+    "freetype": ["zlib", "libpng"],
     "fontconfig": ["freetype", "expat"],
     "pixman": [],
     "cairo": ["zlib", "libpng", "glib", "pixman", "fontconfig", "freetype"],
@@ -205,6 +205,7 @@ SPEC: dict[str, dict] = {
     "libevent": {
         "kind": "autotools",
         "args": ["--disable-libevent-regress", "--disable-samples"],
+        "cflags_extra": "-D_BSD_SOURCE -DPTHREAD_MUTEX_RECURSIVE=PTHREAD_MUTEX_RECURSIVE_NP",
         "pre_env": ['LIBS="-lpthread"'],
     },
     "expat": {"kind": "autotools", "args": ["--without-docbook", "--without-xmlwf"]},
@@ -222,6 +223,7 @@ SPEC: dict[str, dict] = {
             "--disable-embedded-tests", "--disable-docs",
             "--disable-systemd", "--disable-launchd",
         ],
+        "cflags_extra": "-D_BSD_SOURCE -DPTHREAD_MUTEX_RECURSIVE=PTHREAD_MUTEX_RECURSIVE_NP",
         "pre_env": ['THREAD_LIBS="-lpthread -ldietcompat"'],
     },
     "harfbuzz": {
@@ -236,6 +238,7 @@ SPEC: dict[str, dict] = {
     "fontconfig": {
         "kind": "autotools",
         "args": ["--disable-docs", "--disable-nls"],
+        "cflags_extra": "-D_BSD_SOURCE -include stdbool.h",
         "extern": ["gperf"],
     },
     "libpng": {"kind": "autotools", "args": ["--disable-tests"]},
@@ -252,16 +255,16 @@ SPEC: dict[str, dict] = {
     "pango": {
         "kind": "meson",
         "args": [
-            "-Dintrospection=false", "-Ddocumentation=false",
-            "-Dbuild-tests=false", "-Dcairo=enabled",
+            "-Dintrospection=disabled", "-Ddocumentation=false",
+            "-Dbuild-testsuite=false", "-Dcairo=enabled",
             "-Dfontconfig=enabled", "-Dfreetype=enabled",
         ],
     },
-    "atk": {"kind": "meson", "args": ["-Dintrospection=false", "-Ddocs=false"]},
+    "atk": {"kind": "meson", "args": ["-Dintrospection=disabled", "-Ddocs=false"]},
     "gdk-pixbuf": {
         "kind": "meson",
         "args": [
-            "-Dintrospection=false", "-Ddocs=false", "-Dman=false",
+            "-Dintrospection=disabled", "-Ddocs=false", "-Dman=false",
             "-Dtests=false", "-Dpng=enabled", "-Djpeg=disabled",
             "-Dtiff=disabled", "-Dgif=disabled",
         ],
@@ -269,7 +272,7 @@ SPEC: dict[str, dict] = {
     "gtk3": {
         "kind": "meson",
         "args": [
-            "-Ddemos=false", "-Dbuild-tests=false", "-Dintrospection=false",
+            "-Ddemos=false", "-Dtests=false", "-Dintrospection=disabled",
             "-Dcolord=no", "-Dwayland-backend=false", "-Dx11-backend=true",
             "-Dprint-cups=disabled", "-Dcloudproviders=false",
         ],
@@ -598,21 +601,20 @@ def custom_build(name: str) -> str:
     if name == "freetype":
         return """build() {
     log "Configuring FreeType with $CC"
-    (
-        cd builds/unix
-        ./configure \\
-            --build="$(gcc -dumpmachine)" \\
-            --prefix=/usr \\
-            --disable-shared \\
-            --enable-static \\
-            --with-zlib=yes \\
-            --with-bzip2=no \\
-            --with-png=yes \\
-            --with-harfbuzz=yes \\
-            CC="$CC" \\
-            CFLAGS="${CFLAGS:-}" \\
-            LDFLAGS="${LDFLAGS:-}"
-    )
+    # Use the top-level configure: it forwards --build into the internal
+    # builds/unix re-configure, which otherwise rejects dietgcc's triplet.
+    ./configure \\
+        --build="$(gcc -dumpmachine)" \\
+        --prefix=/usr \\
+        --disable-shared \\
+        --enable-static \\
+        --with-zlib=yes \\
+        --with-bzip2=no \\
+        --with-png=yes \\
+        --with-harfbuzz=no \\
+        CC="$CC" \\
+        CFLAGS="${CFLAGS:-}" \\
+        LDFLAGS="${LDFLAGS:-}"
     make -j"${JOBS:-$(nproc)}"
     make DESTDIR="$DESTDIR" install
 }"""
@@ -632,7 +634,10 @@ def custom_build(name: str) -> str:
         -Dglib=enabled \\
         -Dpng=enabled \\
         -Dzlib=enabled \\
+        -Dxlib=disabled \\
+        -Dxcb=disabled \\
         -Dgtk_doc=false \\
+        -Dc_args='-D_BSD_SOURCE -DPTHREAD_MUTEX_RECURSIVE=PTHREAD_MUTEX_RECURSIVE_NP' \\
         || { cat build/meson-logs/meson-log.txt 2>/dev/null; return 1; }
     ninja -C build src/libcairo.a
     install -d "$DESTDIR/usr/lib" "$DESTDIR/usr/include/cairo"
@@ -773,6 +778,10 @@ p = root + "/glib/gspawn.c"
 s = open(p).read()
 s = s.replace("while ((nread = syscall (SYS_getdents64, dir_fd, buf, sizeof(buf))) > 0)",
               "while ((nread = getdents64 (dir_fd, (struct dirent64 *) buf, sizeof(buf))) > 0)")
+# dietlibc has no spawn.h; the host header conflicts with dietlibc's signal
+# types. HAVE_POSIX_SPAWN is not detected, so removing the include is safe.
+s = s.replace("#ifdef HAVE_SPAWN_H\n#include <spawn.h>\n#endif /* HAVE_SPAWN_H */",
+              "/* dietlibc: no spawn.h; posix_spawn is unavailable */")
 open(p, "w").write(s)
 p = root + "/gio/gthreadedresolver.c"
 s = open(p).read()
@@ -809,29 +818,34 @@ PY
         -Dselinux=disabled \
         -Dman=false \
         -Dgtk_doc=false \
-        -Dtests=false \
         || { cat build/meson-logs/meson-log.txt 2>/dev/null; return 1; }
 
     # Host tools from GLib are unstable under dietlibc; build the libraries
     # only (same approach as CLEANUX).
-    ninja -C build glib/libglib-2.0.a gobject/libgobject-2.0.a gio/libgio-2.0.a
+    ninja -C build glib/libglib-2.0.a gobject/libgobject-2.0.a gio/libgio-2.0.a gmodule/libgmodule-2.0.a
 
     install -d "$DESTDIR/usr/lib" "$DESTDIR/usr/include/glib-2.0" \
         "$DESTDIR/usr/include/glib-2.0/glib/deprecated" \
         "$DESTDIR/usr/include/glib-2.0/gobject" \
         "$DESTDIR/usr/include/glib-2.0/gio" \
+        "$DESTDIR/usr/include/glib-2.0/gmodule" \
         "$DESTDIR/usr/lib/glib-2.0/include" \
         "$DESTDIR/usr/lib/pkgconfig"
     install -m644 build/glib/libglib-2.0.a "$DESTDIR/usr/lib/"
     install -m644 build/gobject/libgobject-2.0.a "$DESTDIR/usr/lib/"
     install -m644 build/gio/libgio-2.0.a "$DESTDIR/usr/lib/"
+    install -m644 build/gmodule/libgmodule-2.0.a "$DESTDIR/usr/lib/"
     cp glib/*.h "$DESTDIR/usr/include/glib-2.0/glib/"
     cp glib/glib.h "$DESTDIR/usr/include/glib-2.0/" 2>/dev/null || true
+    cp glib/glib-object.h "$DESTDIR/usr/include/glib-2.0/" 2>/dev/null || true
     cp glib/deprecated/*.h "$DESTDIR/usr/include/glib-2.0/glib/deprecated/" 2>/dev/null || true
     cp gobject/*.h "$DESTDIR/usr/include/glib-2.0/gobject/"
     cp gobject/glib-object.h "$DESTDIR/usr/include/glib-2.0/" 2>/dev/null || true
     cp build/gobject/glib-enumtypes.h "$DESTDIR/usr/include/glib-2.0/gobject/" 2>/dev/null || true
     cp gio/*.h "$DESTDIR/usr/include/glib-2.0/gio/"
+    cp build/gio/gioenumtypes.h "$DESTDIR/usr/include/glib-2.0/gio/" 2>/dev/null || true
+    cp gmodule/*.h "$DESTDIR/usr/include/glib-2.0/gmodule/"
+    cp gmodule/gmodule.h "$DESTDIR/usr/include/glib-2.0/" 2>/dev/null || true
     cp build/glib/glibconfig.h "$DESTDIR/usr/lib/glib-2.0/include/"
 
     cat > "$DESTDIR/usr/lib/pkgconfig/glib-2.0.pc" <<EOF
@@ -842,6 +856,10 @@ libdir=\${prefix}/lib
 Name: GLib
 Description: C Utility Library
 Version: $PACKAGE_VERSION
+glib_genmarshal=glib-genmarshal
+gobject_query=gobject-query
+glib_mkenums=glib-mkenums
+glib_compile_resources=glib-compile-resources
 Libs: -L\${libdir} -lglib-2.0 -lpthread
 Cflags: -I\${includedir}/glib-2.0 -I\${libdir}/glib-2.0/include
 EOF
@@ -867,6 +885,33 @@ Description: glib I/O library
 Version: $PACKAGE_VERSION
 Requires: glib-2.0 gobject-2.0
 Libs: -L\${libdir} -lgio-2.0
+Cflags: -I\${includedir}/glib-2.0 -I\${libdir}/glib-2.0/include
+EOF
+    cat > "$DESTDIR/usr/lib/pkgconfig/gmodule-2.0.pc" <<EOF
+prefix=/usr
+includedir=\${prefix}/include
+libdir=\${prefix}/lib
+
+Name: GModule
+Description: Dynamic module loader for GLib
+Version: $PACKAGE_VERSION
+Requires: glib-2.0
+gmodule_supported=true
+Libs: -L\${libdir} -lgmodule-2.0 -ldl -lpthread
+Cflags: -I\${includedir}/glib-2.0 -I\${libdir}/glib-2.0/include
+EOF
+    cat > "$DESTDIR/usr/lib/pkgconfig/gmodule-no-export-2.0.pc" <<EOF
+prefix=/usr
+includedir=\${prefix}/include
+libdir=\${prefix}/lib
+
+Name: GModule
+Description: Dynamic module loader for GLib
+Version: $PACKAGE_VERSION
+Requires: glib-2.0
+gmodule_supported=true
+gmodule_export=false
+Libs: -L\${libdir} -lgmodule-2.0 -ldl -lpthread
 Cflags: -I\${includedir}/glib-2.0 -I\${libdir}/glib-2.0/include
 EOF
 }'''
