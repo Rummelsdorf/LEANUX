@@ -14,7 +14,9 @@ Reference material:
 - [x] `tools/diet/bin/dietgcc` wrapper compiles and statically links C programs
 - [x] Spell engine resolves dependencies and detects cycles/missing spells
 - [x] zlib 1.3.1 builds with dietlibc; a statically linked test program runs
-- [x] `make test` passes (17 checks)
+- [x] `make test` passes (19 checks)
+- [x] CLEANUX spell metadata, dependency graph and world order ported
+- [x] xz, libpng and pixman build with dietlibc (autotools + meson paths)
 
 ## Phase 0 – Host and base toolchain
 
@@ -31,12 +33,18 @@ Reference material:
 - [x] Dependency resolution with topological ordering
 - [x] Missing dependency and circular dependency detection
 - [x] Per‑package staging in `sysroot/install/<pkg>`
-- [ ] Add a `--dry-run` mode that prints the resolved build plan
+- [x] Add a `--dry-run` mode that prints the resolved build plan
+- [x] Add `--world` and `build/world.order` for the full package set
+- [x] Stage transitive dependency include/library/pkg-config paths
 - [ ] Add per‑package build logs under `build-output/<pkg>/build.log`
 - [ ] Add a manifest of installed files per package
 - [ ] Add reproducible‑build flags and SOURCE_DATE_EPOCH support
 
 ## Phase 2 – Core dependencies (must exist before the applications)
+
+All items below now have ported spell definitions and a validated dependency
+order (`build/world.order`); the checkboxes track *build verification*, which is
+still pending for most packages.
 
 - [x] zlib
 - [ ] openssl (libssl/libcrypto)
@@ -77,7 +85,10 @@ set `FALLBACK_ALLOWED=1` only as a last resort.
 - [ ] Python 3.12
 - [ ] llama.cpp
 
-Current spells exist for bash, OpenSSH, tmux, Python 3.12, llama.cpp, and zlib.
+Current spells exist for bash, OpenSSH, tmux, Python 3.12/3.13, llama.cpp, zlib
+and the 69-package CLEANUX port (X11, MATE, GTK, VLC, Firefox and their
+dependencies). See `PORTING.md`; the dependency graph is complete but most
+ported spells still need source pinning and build verification.
 The remaining applications still need spells. Expect significant porting effort
 for MATE, VLC, Firefox, and Python because they depend on glibc‑specific
 interfaces (NSS, locale, iconv, full pthreads, dynamic loading, C++ runtime).

@@ -1,0 +1,35 @@
+# gdk-pixbuf (dependency for gtk3)
+# Ported from CLEANUX (2026-11-08).
+PACKAGE_NAME="gdk-pixbuf"
+PACKAGE_VERSION="2.42.12"
+PACKAGE_RELEASE="1"
+
+DEPENDENCIES=("glib" "libpng" "zlib")
+EXTERNAL_DEPENDENCIES=()
+SOURCE_URL="https://download.gnome.org/sources/gdk-pixbuf/2.42/gdk-pixbuf-2.42.12.tar.xz"
+SOURCE_HASH="PLACEHOLDER_HASH"
+
+BUILD_STYLE="meson"
+LANGUAGE="c"
+FALLBACK_ALLOWED=0
+USE_DIETCOMPAT=1
+
+build() {
+    log "Configuring ${PACKAGE_NAME} with $CC (meson)"
+    meson setup build \
+        --prefix=/usr \
+        --libdir=lib \
+        --buildtype=release \
+        --default-library=static \
+        -Dintrospection=false \
+        -Ddocs=false \
+        -Dman=false \
+        -Dtests=false \
+        -Dpng=enabled \
+        -Djpeg=disabled \
+        -Dtiff=disabled \
+        -Dgif=disabled \
+        || { cat build/meson-logs/meson-log.txt 2>/dev/null; return 1; }
+    ninja -C build
+    DESTDIR="$DESTDIR" meson install -C build
+}

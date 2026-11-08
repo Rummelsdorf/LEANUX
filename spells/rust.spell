@@ -1,0 +1,22 @@
+# Rust toolchain (prerequisite for building Firefox from source)
+# Ported from CLEANUX (2026-11-08).
+PACKAGE_NAME="rust"
+PACKAGE_VERSION="1.82.0"
+PACKAGE_RELEASE="1"
+
+DEPENDENCIES=("llvm" "python3")
+EXTERNAL_DEPENDENCIES=("gcc" "g++" "make" "perl")
+SOURCE_URL="https://static.rust-lang.org/dist/rust-1.82.0-x86_64-unknown-linux-gnu.tar.gz"
+SOURCE_HASH="PLACEHOLDER_HASH"
+
+BUILD_STYLE="custom"
+LANGUAGE="c++"
+FALLBACK_ALLOWED=1
+USE_DIETCOMPAT=1
+
+build() {
+    # The upstream tarball is a prebuilt glibc-hosted toolchain.  It is used to
+    # build Firefox; it is not a dietlibc build (documented fallback).
+    log "Installing prebuilt Rust toolchain"
+    DESTDIR="$DESTDIR" ./install.sh --prefix=/usr --disable-ldconfig
+}

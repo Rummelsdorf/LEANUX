@@ -1,0 +1,32 @@
+# libevent built with dietlibc (dependency for tor)
+# Ported from CLEANUX (2026-11-08).
+PACKAGE_NAME="libevent"
+PACKAGE_VERSION="2.1.12-stable"
+PACKAGE_RELEASE="1"
+
+DEPENDENCIES=("openssl")
+EXTERNAL_DEPENDENCIES=()
+SOURCE_URL="https://github.com/libevent/libevent/releases/download/release-2.1.12-stable/libevent-2.1.12-stable.tar.gz"
+SOURCE_HASH="92e6de1be9ec176428fd2367677e61ceffc2ee1cb119035037a27d346b0403bb"
+
+BUILD_STYLE="configure"
+LANGUAGE="c"
+FALLBACK_ALLOWED=0
+USE_DIETCOMPAT=1
+
+build() {
+    log "Configuring ${PACKAGE_NAME} with $CC"
+    LIBS="-lpthread" \
+    ./configure \
+        --prefix=/usr \
+        --build="$(gcc -dumpmachine)" \
+        --disable-shared \
+        --enable-static \
+        --disable-libevent-regress \
+        --disable-samples \
+        CC="$CC" \
+        CFLAGS="${CFLAGS:-}" \
+        LDFLAGS="${LDFLAGS:-}"
+    make -j"${JOBS:-$(nproc)}"
+    make DESTDIR="$DESTDIR" install
+}

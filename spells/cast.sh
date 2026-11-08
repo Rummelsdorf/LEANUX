@@ -9,6 +9,9 @@
 #   ./cast.sh <spell> [spell ...]
 #   ./cast.sh --list
 #   ./cast.sh --force <spell>
+#   ./cast.sh --dry-run <spell> [spell ...]   print the resolved build plan
+#   ./cast.sh --world                          build every spell in build/world.order
+#   ./cast.sh --dry-run --world                print the full world build plan
 #
 # Environment:
 #   SPELL_DIR      directory containing *.spell files (default: this dir)
@@ -149,7 +152,7 @@ extract_source() {
 spell_meta() {
     local spell="$1"
     # Only read the simple metadata lines; the build functions are not run here.
-    grep -E '^(PACKAGE_NAME|PACKAGE_VERSION|DEPENDENCIES|EXTERNAL_DEPENDENCIES|FALLBACK_ALLOWED|LANGUAGE|SOURCE_URL|SOURCE_HASH)=' "$spell" || true
+    grep -E '^(PACKAGE_NAME|PACKAGE_VERSION|DEPENDENCIES|EXTERNAL_DEPENDENCIES|FALLBACK_ALLOWED|LANGUAGE|SOURCE_URL|SOURCE_HASH|USE_DIETCOMPAT)=' "$spell" || true
 }
 
 is_built() {
@@ -183,10 +186,18 @@ resolve_deps() {
 
     # shellcheck disable=SC1090
     source <(spell_meta "$spell")
-    GRAPH[$pkg]="${DEPENDENCIES[*]:-}"
+
+    # Packages that use the dietlibc compatibility shim get an implicit
+    # dependency on the dietcompat spell. This mirrors CLEANUX, where the shim
+    # was linked into every package.
+    local deps="${DEPENDENCIES[*]:-}"
+    if [ "${USE_DIETCOMPAT:-0}" = "1" ]; then
+        deps="$deps dietcompat"
+    fi
+    GRAPH[$pkg]="$deps"
 
     local dep
-    for dep in ${DEPENDENCIES[*]:-}; do
+    for dep in $deps; do
         resolve_deps "$dep" "$pkg"
     done
 }
@@ -235,6 +246,47 @@ topological_sort() {
 }
 
 # ---------------------------------------------------------------------------
+# Transitive dependency staging
+# ---------------------------------------------------------------------------
+transitive_deps() {
+    local pkg="$1"
+    local -A seen=()
+    local -a queue=()
+    local dep d
+
+    for dep in ${GRAPH[$pkg]:-}; do
+        queue+=("$dep")
+    done
+
+    while [ ${#queue[@]} -gt 0 ]; do
+        dep="${queue[0]}"
+        queue=("${queue[@]:1}")
+        [ -n "${seen[$dep]:-}" ] && continue
+        seen[$dep]=1
+        for d in ${GRAPH[$dep]:-}; do
+            queue+=("$d")
+        done
+    done
+
+    [ ${#seen[@]} -gt 0 ] || return 0
+    printf '%s\n' "${!seen[@]}"
+}
+
+# Point pkg-config files at the package's staging directory. The files are
+# installed with prefix=/usr; after staging they must resolve to the absolute
+# stage so that dependent builds pick up the staged headers and libraries.
+rewrite_pkgconfig() {
+    local stage="$1"
+    [ -d "$stage" ] || return 0
+    local pc
+    while IFS= read -r -d '' pc; do
+        # Prefix every absolute install directory with the stage. Variables
+        # that already use ${prefix} are left alone and resolve correctly.
+        sed -i -E "s#^(prefix|exec_prefix|libdir|includedir|bindir|sbindir|libexecdir|datadir|sysconfdir|sharedstatedir|localstatedir|infodir|mandir|docdir|dvidir|htmldir|pdfdir|psdir|runstatedir)=/#\1=$stage/#" "$pc"
+    done < <(find "$stage" -type f -name '*.pc' -print0)
+}
+
+# ---------------------------------------------------------------------------
 # Build one package
 # ---------------------------------------------------------------------------
 build_package() {
@@ -249,14 +301,26 @@ build_package() {
     fi
 
     log "=== Building $pkg (dietlibc) ==="
+    # Start from a clean stage so a previous failed build cannot leak files
+    # (or pkg-config files) into this one.
+    rm -rf "$stage"
     mkdir -p "$stage" "$builddir"
+
+    # Collect the staged prefixes of all transitive dependencies so the build
+    # can find headers, libraries, pkg-config files and generated tools.
+    local dep
+    local -a dep_stages=()
+    while IFS= read -r dep; do
+        [ -n "$dep" ] || continue
+        [ -d "$STAGING_DIR/install/$dep" ] && dep_stages+=("$STAGING_DIR/install/$dep")
+    done < <(transitive_deps "$pkg")
 
     (
         set -e
         # Reset metadata for this spell.
         PACKAGE_NAME="$pkg"; PACKAGE_VERSION=""; PACKAGE_RELEASE="1"
         DEPENDENCIES=(); EXTERNAL_DEPENDENCIES=(); FALLBACK_ALLOWED=0
-        LANGUAGE="c"; SOURCE_URL=""; SOURCE_HASH=""
+        LANGUAGE="c"; SOURCE_URL=""; SOURCE_HASH=""; USE_DIETCOMPAT=0
         BUILD_STYLE="configure"
 
         # shellcheck disable=SC1090
@@ -277,11 +341,53 @@ build_package() {
         export PATH="$DIET_PREFIX/bin:$PATH"
         export MAKEFLAGS="-j$JOBS"
 
+        # Build the dependency search paths once. Every dep is installed into
+        # its own stage with a /usr prefix.
+        local dep_flags="" dep_pc="" dep_bins=""
+        local dep_stage inc lib pc
+        for dep_stage in "${dep_stages[@]}"; do
+            for inc in "$dep_stage/usr/include" "$dep_stage/include"; do
+                [ -d "$inc" ] && dep_flags="$dep_flags -I$inc"
+            done
+            for lib in "$dep_stage/usr/lib" "$dep_stage/usr/lib64" \
+                       "$dep_stage/lib" "$dep_stage/lib64"; do
+                [ -d "$lib" ] && dep_flags="$dep_flags -L$lib"
+            done
+            for pc in "$dep_stage/usr/lib/pkgconfig" \
+                      "$dep_stage/usr/lib64/pkgconfig" \
+                      "$dep_stage/usr/share/pkgconfig" \
+                      "$dep_stage/lib/pkgconfig"; do
+                [ -d "$pc" ] && dep_pc="${dep_pc:+$dep_pc:}$pc"
+            done
+            [ -d "$dep_stage/usr/bin" ] && dep_bins="$dep_bins:$dep_stage/usr/bin"
+        done
+
+        [ -n "$dep_bins" ] && export PATH="$PATH$dep_bins"
+        [ -n "$dep_pc" ] && export PKG_CONFIG_PATH="$dep_pc${PKG_CONFIG_PATH:+:$PKG_CONFIG_PATH}"
+        unset PKG_CONFIG_SYSROOT_DIR
+
+        # Remember the caller's flags before appending the staging paths. Some
+        # packages (libpng's pnglibconf generator) only honour CPPFLAGS, and a
+        # fallback build must not inherit flags appended twice.
+        local base_cflags="${CFLAGS:--O2 -static -march=x86-64}"
+        local base_cppflags="${CPPFLAGS:-}"
+        local base_ldflags="${LDFLAGS:--static}"
+
         build_with() {
             local cc="$1"
             export CC="$cc"
-            export CFLAGS="${CFLAGS:--O2 -static -march=x86-64}"
-            export LDFLAGS="${LDFLAGS:--static}"
+            export CFLAGS="$base_cflags$dep_flags"
+            export CPPFLAGS="$base_cppflags$dep_flags"
+            export LDFLAGS="$base_ldflags$dep_flags"
+            # The compatibility shim supplies a handful of glibc APIs that
+            # dietlibc lacks. It is only linked for the dietlibc toolchain.
+            case "$(basename "$cc")" in
+                dietgcc|dietcc)
+                    if [ "${USE_DIETCOMPAT:-0}" = "1" ]; then
+                        export LDFLAGS="$LDFLAGS -ldietcompat -lm"
+                    fi
+                    ;;
+            esac
             if [ "$LANGUAGE" = "c++" ]; then
                 export CXX="${CXX:-g++}"
             fi
@@ -314,6 +420,7 @@ build_package() {
             fi
         fi
 
+        rewrite_pkgconfig "$stage"
         touch "$stage/.built"
     )
 }
@@ -322,7 +429,7 @@ build_package() {
 # Main
 # ---------------------------------------------------------------------------
 main() {
-    local force=0
+    local force=0 dry_run=0 world=0
     local packages=()
 
     while [ $# -gt 0 ]; do
@@ -338,8 +445,16 @@ main() {
                 force=1
                 shift
                 ;;
+            --dry-run|--plan)
+                dry_run=1
+                shift
+                ;;
+            --world)
+                world=1
+                shift
+                ;;
             --help|-h)
-                sed -n '2,20p' "$0"
+                sed -n '2,24p' "$0"
                 exit 0
                 ;;
             -*)
@@ -352,7 +467,35 @@ main() {
         esac
     done
 
+    if [ "$world" = "1" ]; then
+        local world_file="${WORLD_ORDER:-$LEANUX_ROOT/build/world.order}"
+        [ -f "$world_file" ] || die "World order file not found: $world_file"
+        local line word
+        while IFS= read -r line; do
+            line="${line%%#*}"
+            for word in $line; do
+                packages+=("$word")
+            done
+        done < "$world_file"
+    fi
+
     [ ${#packages[@]} -gt 0 ] || die "Usage: $0 <spell> [spell ...]"
+
+    # Resolve the full dependency graph before touching the build host.
+    local pkg
+    for pkg in "${packages[@]}"; do
+        [ -f "$SPELL_DIR/$pkg.spell" ] || die "Spell not found: $SPELL_DIR/$pkg.spell"
+        resolve_deps "$pkg" ""
+    done
+
+    local order=()
+    topological_sort GRAPH order
+
+    log "Build order: ${order[*]}"
+    if [ "$dry_run" = "1" ]; then
+        printf '%s\n' "${order[@]}"
+        exit 0
+    fi
 
     ensure_dietlibc
     mkdir -p "$STAGING_DIR" "$SOURCES_DIR" "$BUILD_ROOT"
@@ -364,17 +507,6 @@ main() {
         done
     fi
 
-    # Resolve the full dependency graph.
-    local pkg
-    for pkg in "${packages[@]}"; do
-        [ -f "$SPELL_DIR/$pkg.spell" ] || die "Spell not found: $SPELL_DIR/$pkg.spell"
-        resolve_deps "$pkg" ""
-    done
-
-    local order=()
-    topological_sort GRAPH order
-
-    log "Build order: ${order[*]}"
     for pkg in "${order[@]}"; do
         build_package "$pkg"
     done

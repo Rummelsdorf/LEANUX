@@ -1,0 +1,30 @@
+# libXfont2 (dependency for xorg-server)
+# Ported from CLEANUX (2026-11-08).
+PACKAGE_NAME="libXfont2"
+PACKAGE_VERSION="2.0.6"
+PACKAGE_RELEASE="1"
+
+DEPENDENCIES=("xorgproto" "libfontenc" "freetype" "zlib")
+EXTERNAL_DEPENDENCIES=()
+SOURCE_URL="https://www.x.org/releases/individual/lib/libXfont2-2.0.6.tar.xz"
+SOURCE_HASH="PLACEHOLDER_HASH"
+
+BUILD_STYLE="configure"
+LANGUAGE="c"
+FALLBACK_ALLOWED=0
+USE_DIETCOMPAT=1
+
+build() {
+    log "Configuring ${PACKAGE_NAME} with $CC"
+    ./configure \
+        --prefix=/usr \
+        --build="$(gcc -dumpmachine)" \
+        --disable-shared \
+        --enable-static \
+        --disable-devel-docs \
+        CC="$CC" \
+        CFLAGS="${CFLAGS:-}" \
+        LDFLAGS="${LDFLAGS:-}"
+    make -j"${JOBS:-$(nproc)}"
+    make DESTDIR="$DESTDIR" install
+}

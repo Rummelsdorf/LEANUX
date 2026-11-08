@@ -1,0 +1,31 @@
+# CPython 3 built with dietlibc (prerequisite for Firefox build)
+# Ported from CLEANUX (2026-11-08).
+PACKAGE_NAME="python3"
+PACKAGE_VERSION="3.13.0"
+PACKAGE_RELEASE="1"
+
+DEPENDENCIES=("zlib" "openssl" "libffi" "xz" "ncurses")
+EXTERNAL_DEPENDENCIES=("readline" "bzip2" "libuuid")
+SOURCE_URL="https://www.python.org/ftp/python/3.13.0/Python-3.13.0.tar.xz"
+SOURCE_HASH="PLACEHOLDER_HASH"
+
+BUILD_STYLE="configure"
+LANGUAGE="c"
+FALLBACK_ALLOWED=1
+USE_DIETCOMPAT=1
+
+build() {
+    log "Configuring ${PACKAGE_NAME} with $CC"
+    ./configure \
+        --prefix=/usr \
+        --build="$(gcc -dumpmachine)" \
+        --disable-shared \
+        --enable-static \
+        --without-ensurepip \
+        --disable-test-modules \
+        CC="$CC" \
+        CFLAGS="${CFLAGS:-}" \
+        LDFLAGS="${LDFLAGS:-}"
+    make -j"${JOBS:-$(nproc)}"
+    make DESTDIR="$DESTDIR" install
+}

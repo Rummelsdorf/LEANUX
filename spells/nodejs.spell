@@ -1,0 +1,22 @@
+# Node.js built with dietlibc (prerequisite for Firefox build)
+# Ported from CLEANUX (2026-11-08).
+PACKAGE_NAME="nodejs"
+PACKAGE_VERSION="22.11.0"
+PACKAGE_RELEASE="1"
+
+DEPENDENCIES=("python3")
+EXTERNAL_DEPENDENCIES=("gcc" "g++" "make")
+SOURCE_URL="https://nodejs.org/dist/v22.11.0/node-v22.11.0.tar.xz"
+SOURCE_HASH="PLACEHOLDER_HASH"
+
+BUILD_STYLE="custom"
+LANGUAGE="c++"
+FALLBACK_ALLOWED=1
+USE_DIETCOMPAT=1
+
+build() {
+    log "Configuring Node.js with $CC"
+    ./configure --prefix=/usr --without-npm
+    make -j"${JOBS:-$(nproc)}"
+    make DESTDIR="$DESTDIR" install
+}

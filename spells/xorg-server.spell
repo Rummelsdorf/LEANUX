@@ -1,0 +1,38 @@
+# X.org X server built with dietlibc for CLEANUX (X11 display server)
+# Ported from CLEANUX (2026-11-08).
+PACKAGE_NAME="xorg-server"
+PACKAGE_VERSION="21.1.13"
+PACKAGE_RELEASE="1"
+
+DEPENDENCIES=("xorgproto" "libXau" "libXdmcp" "libxcb" "libX11" "libXext" "libXrender" "libXfixes" "libXrandr" "libXi" "libXtst" "libXfont2" "libxkbfile" "libdrm" "mesa" "pixman" "fontconfig" "freetype" "dbus" "xkbcomp" "xkeyboard-config")
+EXTERNAL_DEPENDENCIES=("xtrans" "libXcomposite" "libXdamage" "libXcursor" "libXinerama" "libXmu" "libXpm" "libpciaccess")
+SOURCE_URL="https://www.x.org/releases/individual/xserver/xorg-server-21.1.13.tar.xz"
+SOURCE_HASH="PLACEHOLDER_HASH"
+
+BUILD_STYLE="configure"
+LANGUAGE="c"
+FALLBACK_ALLOWED=0
+USE_DIETCOMPAT=1
+
+build() {
+    log "Configuring ${PACKAGE_NAME} with $CC"
+    ./configure \
+        --prefix=/usr \
+        --build="$(gcc -dumpmachine)" \
+        --disable-systemd-logind \
+        --disable-docs \
+        --disable-devel-docs \
+        --disable-unit-tests \
+        --enable-kdrive \
+        --disable-xorg \
+        --disable-xnest \
+        --disable-xvfb \
+        --disable-xwayland \
+        --disable-xwin \
+        --disable-dmx \
+        CC="$CC" \
+        CFLAGS="${CFLAGS:-}" \
+        LDFLAGS="${LDFLAGS:-}"
+    make -j"${JOBS:-$(nproc)}"
+    make DESTDIR="$DESTDIR" install
+}

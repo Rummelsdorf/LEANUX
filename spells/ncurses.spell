@@ -1,0 +1,33 @@
+# ncurses built with dietlibc (dependency for mc)
+# Ported from CLEANUX (2026-11-08).
+PACKAGE_NAME="ncurses"
+PACKAGE_VERSION="6.5"
+PACKAGE_RELEASE="1"
+
+DEPENDENCIES=()
+EXTERNAL_DEPENDENCIES=()
+SOURCE_URL="https://ftp.gnu.org/gnu/ncurses/ncurses-6.5.tar.gz"
+SOURCE_HASH="PLACEHOLDER_HASH"
+
+BUILD_STYLE="configure"
+LANGUAGE="c"
+FALLBACK_ALLOWED=0
+USE_DIETCOMPAT=1
+
+build() {
+    log "Configuring ${PACKAGE_NAME} with $CC"
+    ./configure \
+        --prefix=/usr \
+        --build="$(gcc -dumpmachine)" \
+        --without-shared \
+        --without-debug \
+        --enable-widec \
+        --without-ada \
+        --without-manpages \
+        --without-tests \
+        CC="$CC" \
+        CFLAGS="${CFLAGS:-}" \
+        LDFLAGS="${LDFLAGS:-}"
+    make -j"${JOBS:-$(nproc)}"
+    make DESTDIR="$DESTDIR" install
+}

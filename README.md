@@ -10,16 +10,19 @@ spell explicitly allows a fallback (`FALLBACK_ALLOWED=1`).
 | Area | Status |
 |------|--------|
 | dietlibc 0.35 bootstrap | **working** (built from the bundled tarball into `tools/diet`) |
-| Spell/dependency engine | **working** (topological ordering, cycle and missing-dependency detection) |
+| Spell/dependency engine | **working** (topological ordering, cycle and missing-dependency detection, dependency staging) |
 | dietlibc compile + static link | **verified** |
 | zlib 1.3.1 built with dietlibc | **verified** (static library + linked test program run) |
-| Full desktop/AI package set | **pending** – spells and dependency porting still required |
+| CLEANUX package port | **spells and graph imported** – 70-package world order; see `PORTING.md` |
+| xz, libpng, pixman built with dietlibc | **verified** |
+| Full desktop/AI package set | **in progress** – 53 ported spells still need their archives pinned |
 | Live ISO | **not built yet** – only after the package set compiles |
 
-The project does **not** currently build the full MATE/Firefox/VLC/Python/llama.cpp
-stack. Those packages need dedicated spells and, in several cases, porting work
-because dietlibc does not implement all glibc interfaces. The build framework is
-ready to drive that work.
+The project does **not** yet build the full MATE/Firefox/VLC/Python/llama.cpp
+stack. The spell definitions and dependency graph are in place, but most of the
+CLEANUX source archives were not cached in the reference tree, so those spells
+still carry `PLACEHOLDER_HASH` and will download their sources on first build.
+See `PORTING.md` for the exact state.
 
 ## Quick start
 
@@ -49,6 +52,9 @@ Build outputs are staged in `sysroot/install/<package>/`.
 | `make bootstrap-dietlibc` | Build dietlibc into `tools/diet` |
 | `make test` | Run all functional tests |
 | `make cast PKGS="..."` | Build one or more spells with dependency resolution |
+| `make world` | Build every package in `build/world.order` |
+| `make plan PKGS="..."` | Print the resolved build plan without building |
+| `make plan-world` | Print the full world build plan |
 | `./spells/cast.sh --list` | List available spells |
 | `./spells/cast.sh --force <spell>` | Rebuild a spell from scratch |
 | `make verify` | Verify pinned source hashes |
@@ -57,15 +63,34 @@ Build outputs are staged in `sysroot/install/<package>/`.
 
 ```
 bootstrap/        dietlibc bootstrap script
-build/            config.toml and sources.lock.toml
+build/            config.toml, sources.lock.toml and world.order
+compat/           dietcompat compatibility shim (dietlibc)
 diet/             dietlibc 0.35 tarball + FAQ
 spells/           spell recipes and the cast.sh build engine
 sources/          downloaded source archives (cache)
 build-output/     per-package build trees
 sysroot/install/  staged installs (one directory per package)
 tools/diet/       dietlibc installation and dietgcc wrapper
+tools/            host checks, source verification, CLEANUX importer
 tests/            functional test suite
 ```
+
+## Ported package set
+
+`tools/import_cleanux_spells.py` imports the CLEANUX spell metadata and
+dependency graph. The generated world order is `build/world.order`:
+
+```bash
+make plan-world     # inspect the 70-package order
+make world          # build it (long; most sources are downloaded on demand)
+```
+
+The port keeps CLEANUX versions, URLs and descriptions, but fixes dependency
+ordering mistakes in the original list (for example `xorgproto` before the X11
+libraries and `libpng` before `freetype`). Four missing transitive dependencies
+were added as spells: `libpthread-stubs`, `libfontenc`, `libxkbfile` and
+`libxklavier`. `dietcompat` supplies the handful of glibc interfaces dietlibc
+does not implement. See `PORTING.md`.
 
 ## dietlibc policy
 

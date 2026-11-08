@@ -15,7 +15,7 @@ FALLBACK_ALLOWED=0
 
 build() {
     log "Configuring zlib with $CC"
-    ./configure --static
+    ./configure --prefix=/usr --static
     make -j"${JOBS:-$(nproc)}" CC="$CC" AR="ar" RANLIB=ranlib
     make DESTDIR="$DESTDIR" install
 }

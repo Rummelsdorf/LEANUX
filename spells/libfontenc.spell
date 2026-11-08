@@ -1,0 +1,29 @@
+# libfontenc – font encoding library (added port dependency of libXfont2)
+# Ported from CLEANUX (2026-11-08).
+PACKAGE_NAME="libfontenc"
+PACKAGE_VERSION="1.1.8"
+PACKAGE_RELEASE="1"
+
+DEPENDENCIES=("xorgproto" "zlib")
+EXTERNAL_DEPENDENCIES=()
+SOURCE_URL="https://www.x.org/releases/individual/lib/libfontenc-1.1.8.tar.xz"
+SOURCE_HASH="PLACEHOLDER_HASH"
+
+BUILD_STYLE="configure"
+LANGUAGE="c"
+FALLBACK_ALLOWED=0
+USE_DIETCOMPAT=1
+
+build() {
+    log "Configuring ${PACKAGE_NAME} with $CC"
+    ./configure \
+        --prefix=/usr \
+        --build="$(gcc -dumpmachine)" \
+        --disable-shared \
+        --enable-static \
+        CC="$CC" \
+        CFLAGS="${CFLAGS:-}" \
+        LDFLAGS="${LDFLAGS:-}"
+    make -j"${JOBS:-$(nproc)}"
+    make DESTDIR="$DESTDIR" install
+}

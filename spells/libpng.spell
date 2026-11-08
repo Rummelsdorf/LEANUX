@@ -1,0 +1,30 @@
+# libpng (dependency for cairo, gdk-pixbuf)
+# Ported from CLEANUX (2026-11-08).
+PACKAGE_NAME="libpng"
+PACKAGE_VERSION="1.6.44"
+PACKAGE_RELEASE="1"
+
+DEPENDENCIES=("zlib")
+EXTERNAL_DEPENDENCIES=()
+SOURCE_URL="https://download.sourceforge.net/libpng/libpng-1.6.44.tar.xz"
+SOURCE_HASH="60c4da1d5b7f0aa8d158da48e8f8afa9773c1c8baa5d21974df61f1886b8ce8e"
+
+BUILD_STYLE="configure"
+LANGUAGE="c"
+FALLBACK_ALLOWED=0
+USE_DIETCOMPAT=1
+
+build() {
+    log "Configuring ${PACKAGE_NAME} with $CC"
+    ./configure \
+        --prefix=/usr \
+        --build="$(gcc -dumpmachine)" \
+        --disable-shared \
+        --enable-static \
+        --disable-tests \
+        CC="$CC" \
+        CFLAGS="${CFLAGS:-}" \
+        LDFLAGS="${LDFLAGS:-}"
+    make -j"${JOBS:-$(nproc)}"
+    make DESTDIR="$DESTDIR" install
+}

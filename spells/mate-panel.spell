@@ -1,0 +1,31 @@
+# mate-panel (MATE panel)
+# Ported from CLEANUX (2026-11-08).
+PACKAGE_NAME="mate-panel"
+PACKAGE_VERSION="1.28.0"
+PACKAGE_RELEASE="1"
+
+DEPENDENCIES=("glib" "gtk3" "mate-desktop" "mate-menus" "libmatekbd" "dconf" "gsettings-desktop-schemas" "libxklavier" "cairo" "pango" "atk" "gdk-pixbuf" "libX11" "libXext" "libXrandr" "libXrender" "libXfixes" "libXi" "libXtst")
+EXTERNAL_DEPENDENCIES=("libwnck-3.0")
+SOURCE_URL="https://pub.mate-desktop.org/releases/1.28/mate-panel-1.28.0.tar.xz"
+SOURCE_HASH="PLACEHOLDER_HASH"
+
+BUILD_STYLE="configure"
+LANGUAGE="c"
+FALLBACK_ALLOWED=0
+USE_DIETCOMPAT=1
+
+build() {
+    log "Configuring ${PACKAGE_NAME} with $CC"
+    ./configure \
+        --prefix=/usr \
+        --build="$(gcc -dumpmachine)" \
+        --disable-shared \
+        --enable-static \
+        --disable-introspection \
+        --disable-nls \
+        CC="$CC" \
+        CFLAGS="${CFLAGS:-}" \
+        LDFLAGS="${LDFLAGS:-}"
+    make -j"${JOBS:-$(nproc)}"
+    make DESTDIR="$DESTDIR" install
+}

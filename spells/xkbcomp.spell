@@ -1,0 +1,27 @@
+# xkbcomp (dependency for xorg-server)
+# Ported from CLEANUX (2026-11-08).
+PACKAGE_NAME="xkbcomp"
+PACKAGE_VERSION="1.4.7"
+PACKAGE_RELEASE="1"
+
+DEPENDENCIES=("xorgproto" "libX11" "libxcb" "libxkbfile")
+EXTERNAL_DEPENDENCIES=()
+SOURCE_URL="https://www.x.org/releases/individual/app/xkbcomp-1.4.7.tar.xz"
+SOURCE_HASH="PLACEHOLDER_HASH"
+
+BUILD_STYLE="configure"
+LANGUAGE="c"
+FALLBACK_ALLOWED=0
+USE_DIETCOMPAT=1
+
+build() {
+    log "Configuring ${PACKAGE_NAME} with $CC"
+    ./configure \
+        --prefix=/usr \
+        --build="$(gcc -dumpmachine)" \
+        CC="$CC" \
+        CFLAGS="${CFLAGS:-}" \
+        LDFLAGS="${LDFLAGS:-}"
+    make -j"${JOBS:-$(nproc)}"
+    make DESTDIR="$DESTDIR" install
+}

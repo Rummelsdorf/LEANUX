@@ -1,0 +1,36 @@
+# Qt base (optional dependency for vlc)
+# Ported from CLEANUX (2026-11-08).
+PACKAGE_NAME="qtbase"
+PACKAGE_VERSION="6.8.1"
+PACKAGE_RELEASE="1"
+
+DEPENDENCIES=("glib" "dbus" "zlib" "libpng" "harfbuzz" "openssl" "fontconfig" "freetype" "xorgproto" "libxcb" "libX11" "libXext" "libXrender" "libXfixes" "libXi" "libXtst")
+EXTERNAL_DEPENDENCIES=("perl" "python3")
+SOURCE_URL="https://download.qt.io/official_releases/qt/6.8/6.8.1/submodules/qtbase-everywhere-src-6.8.1.tar.xz"
+SOURCE_HASH="PLACEHOLDER_HASH"
+
+BUILD_STYLE="custom"
+LANGUAGE="c++"
+FALLBACK_ALLOWED=1
+USE_DIETCOMPAT=1
+
+build() {
+    log "Configuring QtBase with $CC"
+    ./configure \
+        -prefix /usr \
+        -static \
+        -release \
+        -opensource \
+        -confirm-license \
+        -nomake examples \
+        -nomake tests \
+        -no-icu \
+        -no-opengl \
+        -system-zlib \
+        -system-png \
+        -system-freetype \
+        -system-harfbuzz \
+        -xcb
+    make -j"${JOBS:-$(nproc)}"
+    make INSTALL_ROOT="$DESTDIR" install
+}

@@ -1,0 +1,40 @@
+# cairo built with dietlibc (dependency for pango/gtk3)
+# Ported from CLEANUX (2026-11-08).
+PACKAGE_NAME="cairo"
+PACKAGE_VERSION="1.18.2"
+PACKAGE_RELEASE="1"
+
+DEPENDENCIES=("zlib" "libpng" "glib" "pixman" "fontconfig" "freetype")
+EXTERNAL_DEPENDENCIES=()
+SOURCE_URL="https://www.cairographics.org/releases/cairo-1.18.2.tar.xz"
+SOURCE_HASH="a62b9bb42425e844cc3d6ddde043ff39dbabedd1542eba57a2eb79f85889d45a"
+
+BUILD_STYLE="custom"
+LANGUAGE="c"
+FALLBACK_ALLOWED=0
+USE_DIETCOMPAT=1
+
+build() {
+    log "Configuring Cairo with $CC (meson)"
+    meson setup build \
+        --prefix=/usr \
+        --libdir=lib \
+        --buildtype=release \
+        --default-library=static \
+        -Dtests=disabled \
+        -Dglib=enabled \
+        -Dpng=enabled \
+        -Dzlib=enabled \
+        -Dgtk_doc=false \
+        || { cat build/meson-logs/meson-log.txt 2>/dev/null; return 1; }
+    ninja -C build src/libcairo.a
+    install -d "$DESTDIR/usr/lib" "$DESTDIR/usr/include/cairo"
+    install -m644 build/src/libcairo.a "$DESTDIR/usr/lib/libcairo.a"
+    cp src/cairo*.h "$DESTDIR/usr/include/cairo/" 2>/dev/null || true
+    cp build/src/cairo-version.h "$DESTDIR/usr/include/cairo/" 2>/dev/null || true
+    cp build/src/cairo-features.h "$DESTDIR/usr/include/cairo/" 2>/dev/null || true
+    if [ -f build/meson-private/cairo.pc ]; then
+        install -d "$DESTDIR/usr/lib/pkgconfig"
+        install -m644 build/meson-private/cairo.pc "$DESTDIR/usr/lib/pkgconfig/cairo.pc"
+    fi
+}

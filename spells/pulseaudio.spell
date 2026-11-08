@@ -1,0 +1,33 @@
+# pulseaudio (optional audio for vlc)
+# Ported from CLEANUX (2026-11-08).
+PACKAGE_NAME="pulseaudio"
+PACKAGE_VERSION="17.0"
+PACKAGE_RELEASE="1"
+
+DEPENDENCIES=("glib" "libffi" "dbus" "libX11")
+EXTERNAL_DEPENDENCIES=("libsndfile" "libsoxr" "libltdl")
+SOURCE_URL="https://www.freedesktop.org/software/pulseaudio/releases/pulseaudio-17.0.tar.xz"
+SOURCE_HASH="PLACEHOLDER_HASH"
+
+BUILD_STYLE="meson"
+LANGUAGE="c"
+FALLBACK_ALLOWED=0
+USE_DIETCOMPAT=1
+
+build() {
+    log "Configuring ${PACKAGE_NAME} with $CC (meson)"
+    meson setup build \
+        --prefix=/usr \
+        --libdir=lib \
+        --buildtype=release \
+        --default-library=static \
+        -Ddaemon=false \
+        -Ddoxygen=false \
+        -Dman=false \
+        -Dtests=false \
+        -Ddatabase=simple \
+        -Dx11=true \
+        || { cat build/meson-logs/meson-log.txt 2>/dev/null; return 1; }
+    ninja -C build
+    DESTDIR="$DESTDIR" meson install -C build
+}

@@ -1,26 +1,30 @@
-# OpenSSH – server and client
+# OpenSSH client and sshd built with dietlibc for CLEANUX (remote access)
+# Ported from CLEANUX (2026-11-08).
 PACKAGE_NAME="openssh"
-PACKAGE_VERSION="9.5p1"
+PACKAGE_VERSION="9.9p1"
 PACKAGE_RELEASE="1"
 
-DEPENDENCIES=("zlib")
-# OpenSSL and PAM are host-provided until their spells exist.
-EXTERNAL_DEPENDENCIES=("libssl" "libcrypto" "pam")
-
-SOURCE_URL="https://cdn.openbsd.org/pub/OpenSSH/openssh-9.5p1.tar.gz"
+DEPENDENCIES=("zlib" "openssl")
+EXTERNAL_DEPENDENCIES=("pam")
+SOURCE_URL="https://cdn.openbsd.org/pub/OpenBSD/OpenSSH/portable/openssh-9.9p1.tar.gz"
 SOURCE_HASH="PLACEHOLDER_HASH"
 
 BUILD_STYLE="configure"
 LANGUAGE="c"
-FALLBACK_ALLOWED=1
+FALLBACK_ALLOWED=0
+USE_DIETCOMPAT=1
 
 build() {
-    log "Configuring OpenSSH with $CC"
+    log "Configuring ${PACKAGE_NAME} with $CC"
     ./configure \
         --prefix=/usr \
+        --build="$(gcc -dumpmachine)" \
         --sysconfdir=/etc/ssh \
         --with-ssl-dir=/usr \
         --without-zlib-version-check \
+        --disable-strip \
+        --with-privsep-path=/var/empty \
+        --without-pam \
         CC="$CC" \
         CFLAGS="${CFLAGS:-}" \
         LDFLAGS="${LDFLAGS:-}"

@@ -1,0 +1,32 @@
+# libffi (dependency for glib)
+# Ported from CLEANUX (2026-11-08).
+PACKAGE_NAME="libffi"
+PACKAGE_VERSION="3.4.6"
+PACKAGE_RELEASE="1"
+
+DEPENDENCIES=()
+EXTERNAL_DEPENDENCIES=()
+SOURCE_URL="https://github.com/libffi/libffi/releases/download/v3.4.6/libffi-3.4.6.tar.gz"
+SOURCE_HASH="b0dea9df23c863a7a50e825440f3ebffabd65df1497108e5d437747843895a4e"
+
+BUILD_STYLE="configure"
+LANGUAGE="c"
+FALLBACK_ALLOWED=0
+USE_DIETCOMPAT=1
+
+build() {
+    log "Configuring ${PACKAGE_NAME} with $CC"
+    export CFLAGS="${CFLAGS:-} -fcf-protection=none"
+    ./configure \
+        --prefix=/usr \
+        --build="$(gcc -dumpmachine)" \
+        --disable-shared \
+        --enable-static \
+        --disable-exec-static-tramp \
+        --disable-docs \
+        CC="$CC" \
+        CFLAGS="${CFLAGS:-}" \
+        LDFLAGS="${LDFLAGS:-}"
+    make -j"${JOBS:-$(nproc)}"
+    make DESTDIR="$DESTDIR" install
+}

@@ -1,0 +1,25 @@
+# OpenSSL built with dietlibc (dependency for openssh, tor, vlc)
+# Ported from CLEANUX (2026-11-08).
+PACKAGE_NAME="openssl"
+PACKAGE_VERSION="3.3.2"
+PACKAGE_RELEASE="1"
+
+DEPENDENCIES=("zlib")
+EXTERNAL_DEPENDENCIES=()
+SOURCE_URL="https://www.openssl.org/source/openssl-3.3.2.tar.gz"
+SOURCE_HASH="2e8a40b01979afe8be0bbfb3de5dc1c6709fedb46d6c89c10da114ab5fc3d281"
+
+BUILD_STYLE="custom"
+LANGUAGE="c"
+FALLBACK_ALLOWED=0
+USE_DIETCOMPAT=1
+
+build() {
+    log "Configuring OpenSSL with $CC"
+    ./Configure linux-x86_64 \
+        no-shared no-threads no-dso no-afalgeng no-apps no-tests \
+        --prefix=/usr --openssldir=/etc/ssl --libdir=lib \
+        CC="$CC" CFLAGS="${CFLAGS:-}" LDFLAGS="${LDFLAGS:-}"
+    make -j"${JOBS:-$(nproc)}"
+    make DESTDIR="$DESTDIR" install_sw
+}

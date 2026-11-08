@@ -1,0 +1,31 @@
+# mate-session-manager (MATE session)
+# Ported from CLEANUX (2026-11-08).
+PACKAGE_NAME="mate-session-manager"
+PACKAGE_VERSION="1.28.0"
+PACKAGE_RELEASE="1"
+
+DEPENDENCIES=("glib" "gtk3" "dbus" "mate-desktop" "gsettings-desktop-schemas" "dconf" "cairo" "pango" "libX11" "libXext" "libXrender" "libXrandr" "libXfixes" "libXi" "libXtst")
+EXTERNAL_DEPENDENCIES=("libSM" "libICE")
+SOURCE_URL="https://pub.mate-desktop.org/releases/1.28/mate-session-manager-1.28.0.tar.xz"
+SOURCE_HASH="PLACEHOLDER_HASH"
+
+BUILD_STYLE="configure"
+LANGUAGE="c"
+FALLBACK_ALLOWED=0
+USE_DIETCOMPAT=1
+
+build() {
+    log "Configuring ${PACKAGE_NAME} with $CC"
+    ./configure \
+        --prefix=/usr \
+        --build="$(gcc -dumpmachine)" \
+        --disable-shared \
+        --enable-static \
+        --disable-introspection \
+        --disable-nls \
+        CC="$CC" \
+        CFLAGS="${CFLAGS:-}" \
+        LDFLAGS="${LDFLAGS:-}"
+    make -j"${JOBS:-$(nproc)}"
+    make DESTDIR="$DESTDIR" install
+}

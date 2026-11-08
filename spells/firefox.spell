@@ -1,0 +1,30 @@
+# Mozilla Firefox built with dietlibc (web browser for CLEANUX)
+# Ported from CLEANUX (2026-11-08).
+PACKAGE_NAME="firefox"
+PACKAGE_VERSION="132.0"
+PACKAGE_RELEASE="1"
+
+DEPENDENCIES=("rust" "llvm" "python3" "nodejs" "nasm" "gtk3" "glib" "cairo" "pango" "atk" "gdk-pixbuf" "dbus" "zlib" "xz" "openssl" "libpng" "harfbuzz" "freetype" "fontconfig" "xorgproto" "libxcb" "libX11" "libXext" "libXrender" "libXfixes" "libXrandr" "libXi" "libXtst" "xorg-server" "libdrm" "mesa" "ffmpeg" "alsa-lib" "pulseaudio")
+EXTERNAL_DEPENDENCIES=("perl" "yasm" "zip" "unzip")
+SOURCE_URL="https://archive.mozilla.org/pub/firefox/releases/132.0/source/firefox-132.0.source.tar.xz"
+SOURCE_HASH="PLACEHOLDER_HASH"
+
+BUILD_STYLE="custom"
+LANGUAGE="c++"
+FALLBACK_ALLOWED=1
+USE_DIETCOMPAT=1
+
+build() {
+    log "Configuring Firefox with $CC"
+    cat > .mozconfig <<'EOF'
+ac_add_options --prefix=/usr
+ac_add_options --enable-application=browser
+ac_add_options --enable-optimize
+ac_add_options --disable-debug
+ac_add_options --disable-tests
+ac_add_options --disable-crashreporter
+ac_add_options --disable-updater
+EOF
+    ./mach build
+    DESTDIR="$DESTDIR" ./mach install
+}

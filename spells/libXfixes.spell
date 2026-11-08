@@ -1,0 +1,29 @@
+# libXfixes (dependency for X server/MATE)
+# Ported from CLEANUX (2026-11-08).
+PACKAGE_NAME="libXfixes"
+PACKAGE_VERSION="6.0.1"
+PACKAGE_RELEASE="1"
+
+DEPENDENCIES=("xorgproto" "libX11")
+EXTERNAL_DEPENDENCIES=()
+SOURCE_URL="https://www.x.org/releases/individual/lib/libXfixes-6.0.1.tar.xz"
+SOURCE_HASH="PLACEHOLDER_HASH"
+
+BUILD_STYLE="configure"
+LANGUAGE="c"
+FALLBACK_ALLOWED=0
+USE_DIETCOMPAT=1
+
+build() {
+    log "Configuring ${PACKAGE_NAME} with $CC"
+    ./configure \
+        --prefix=/usr \
+        --build="$(gcc -dumpmachine)" \
+        --disable-shared \
+        --enable-static \
+        CC="$CC" \
+        CFLAGS="${CFLAGS:-}" \
+        LDFLAGS="${LDFLAGS:-}"
+    make -j"${JOBS:-$(nproc)}"
+    make DESTDIR="$DESTDIR" install
+}

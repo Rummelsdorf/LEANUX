@@ -1,0 +1,34 @@
+# VLC media player built with dietlibc for CLEANUX (media playback)
+# Ported from CLEANUX (2026-11-08).
+PACKAGE_NAME="vlc"
+PACKAGE_VERSION="3.0.21"
+PACKAGE_RELEASE="1"
+
+DEPENDENCIES=("ffmpeg" "alsa-lib" "pulseaudio" "qtbase" "ncurses" "glib" "dbus" "gtk3" "zlib" "xz" "openssl" "libevent" "fontconfig" "freetype" "libpng" "harfbuzz" "xorgproto" "libxcb" "libX11" "libXext" "libXrender" "libXfixes" "libXrandr" "libXi" "libXtst" "xorg-server" "libdrm" "mesa")
+EXTERNAL_DEPENDENCIES=("gettext" "libgcrypt" "libxml2")
+SOURCE_URL="https://get.videolan.org/vlc/3.0.21/vlc-3.0.21.tar.xz"
+SOURCE_HASH="PLACEHOLDER_HASH"
+
+BUILD_STYLE="configure"
+LANGUAGE="c"
+FALLBACK_ALLOWED=1
+USE_DIETCOMPAT=1
+
+build() {
+    log "Configuring ${PACKAGE_NAME} with $CC"
+    ./configure \
+        --prefix=/usr \
+        --build="$(gcc -dumpmachine)" \
+        --disable-lua \
+        --disable-qt \
+        --disable-ncurses \
+        --disable-skins2 \
+        --disable-vlm \
+        --disable-addons \
+        --disable-doc \
+        CC="$CC" \
+        CFLAGS="${CFLAGS:-}" \
+        LDFLAGS="${LDFLAGS:-}"
+    make -j"${JOBS:-$(nproc)}"
+    make DESTDIR="$DESTDIR" install
+}

@@ -1,0 +1,36 @@
+# dbus (dependency for glib/MATE)
+# Ported from CLEANUX (2026-11-08).
+PACKAGE_NAME="dbus"
+PACKAGE_VERSION="1.14.10"
+PACKAGE_RELEASE="1"
+
+DEPENDENCIES=("glib")
+EXTERNAL_DEPENDENCIES=()
+SOURCE_URL="https://dbus.freedesktop.org/releases/dbus/dbus-1.14.10.tar.xz"
+SOURCE_HASH="ba1f21d2bd9d339da2d4aa8780c09df32fea87998b73da24f49ab9df1e36a50f"
+
+BUILD_STYLE="configure"
+LANGUAGE="c"
+FALLBACK_ALLOWED=0
+USE_DIETCOMPAT=1
+
+build() {
+    log "Configuring ${PACKAGE_NAME} with $CC"
+    THREAD_LIBS="-lpthread -ldietcompat" \
+    ./configure \
+        --prefix=/usr \
+        --build="$(gcc -dumpmachine)" \
+        --disable-shared \
+        --enable-static \
+        --disable-tests \
+        --disable-modular-tests \
+        --disable-embedded-tests \
+        --disable-docs \
+        --disable-systemd \
+        --disable-launchd \
+        CC="$CC" \
+        CFLAGS="${CFLAGS:-}" \
+        LDFLAGS="${LDFLAGS:-}"
+    make -j"${JOBS:-$(nproc)}"
+    make DESTDIR="$DESTDIR" install
+}

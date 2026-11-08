@@ -1,7 +1,7 @@
 PYTHON := python3
 PKGS ?= zlib
 
-.PHONY: help check-host directories verify bootstrap-dietlibc cast test clean
+.PHONY: help check-host directories verify bootstrap-dietlibc cast world plan plan-world test clean
 
 help:
 	@echo "LEANUX build system"
@@ -12,6 +12,9 @@ help:
 	@echo "  verify             Verify downloaded sources"
 	@echo "  bootstrap-dietlibc Build dietlibc into tools/diet"
 	@echo "  cast PKGS='...'    Build spells with dietlibc (default: zlib)"
+	@echo "  world              Build every package in build/world.order"
+	@echo "  plan PKGS='...'    Print the resolved build plan (dry run)"
+	@echo "  plan-world         Print the full world build plan"
 	@echo "  test               Run the build-system test suite"
 	@echo "  clean              Remove generated build files"
 
@@ -29,6 +32,15 @@ bootstrap-dietlibc:
 
 cast:
 	./spells/cast.sh $(PKGS)
+
+world:
+	./spells/cast.sh --world
+
+plan:
+	./spells/cast.sh --dry-run $(PKGS)
+
+plan-world:
+	./spells/cast.sh --dry-run --world
 
 test:
 	./tests/run-tests.sh

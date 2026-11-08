@@ -1,0 +1,18 @@
+# MATE desktop environment built with dietlibc for CLEANUX (X11 desktop)
+# Ported from CLEANUX (2026-11-08).
+PACKAGE_NAME="mate"
+PACKAGE_VERSION="1.28.0"
+PACKAGE_RELEASE="1"
+
+DEPENDENCIES=("mate-desktop" "mate-menus" "marco" "mate-panel" "mate-session-manager" "mate-terminal" "caja" "libmatekbd")
+EXTERNAL_DEPENDENCIES=()
+SOURCE_URL=""
+
+BUILD_STYLE="meta"
+LANGUAGE="c"
+FALLBACK_ALLOWED=0
+USE_DIETCOMPAT=0
+
+build() {
+    log "Metapackage ${PACKAGE_NAME}: dependencies only"
+}

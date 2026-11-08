@@ -1,0 +1,36 @@
+# FreeType built with dietlibc (dependency for xorg-server, fontconfig)
+# Ported from CLEANUX (2026-11-08).
+PACKAGE_NAME="freetype"
+PACKAGE_VERSION="2.13.3"
+PACKAGE_RELEASE="1"
+
+DEPENDENCIES=("zlib" "harfbuzz" "libpng")
+EXTERNAL_DEPENDENCIES=()
+SOURCE_URL="https://download.savannah.gnu.org/releases/freetype/freetype-2.13.3.tar.xz"
+SOURCE_HASH="0550350666d427c74daeb85d5ac7bb353acba5f76956395995311a9c6f063289"
+
+BUILD_STYLE="custom"
+LANGUAGE="c"
+FALLBACK_ALLOWED=0
+USE_DIETCOMPAT=1
+
+build() {
+    log "Configuring FreeType with $CC"
+    (
+        cd builds/unix
+        ./configure \
+            --build="$(gcc -dumpmachine)" \
+            --prefix=/usr \
+            --disable-shared \
+            --enable-static \
+            --with-zlib=yes \
+            --with-bzip2=no \
+            --with-png=yes \
+            --with-harfbuzz=yes \
+            CC="$CC" \
+            CFLAGS="${CFLAGS:-}" \
+            LDFLAGS="${LDFLAGS:-}"
+    )
+    make -j"${JOBS:-$(nproc)}"
+    make DESTDIR="$DESTDIR" install
+}

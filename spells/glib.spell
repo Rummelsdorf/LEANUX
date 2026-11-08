@@ -1,0 +1,157 @@
+# glib (dependency for gtk3, dbus, gsettings; meson build)
+# Ported from CLEANUX (2026-11-08).
+PACKAGE_NAME="glib"
+PACKAGE_VERSION="2.60.7"
+PACKAGE_RELEASE="1"
+
+DEPENDENCIES=("zlib" "libffi" "pcre2")
+EXTERNAL_DEPENDENCIES=()
+SOURCE_URL="https://download.gnome.org/sources/glib/2.60/glib-2.60.7.tar.xz"
+SOURCE_HASH="8b12c0af569afd3b71200556ad751bad4cf4bf7bc4b5f880638459a42ca86310"
+
+BUILD_STYLE="custom"
+LANGUAGE="c"
+FALLBACK_ALLOWED=0
+USE_DIETCOMPAT=1
+
+build() {
+    log "Configuring GLib with $CC (meson)"
+
+    # GLib uses a few interfaces dietlibc does not implement.  These patches
+    # are carried over from CLEANUX's glib spell.
+    python3 - "$PWD" <<'PY'
+import re, sys
+root = sys.argv[1]
+p = root + "/glib/ggettext.c"
+s = open(p).read()
+s = s.replace("#include <libintl.h>\n", "#include <libintl.h>\n#ifdef dngettext\n#undef dngettext\n#endif\n", 1)
+open(p, "w").write(s)
+p = root + "/glib/glib-init.c"
+s = open(p).read()
+if "#include <strings.h>" not in s:
+    s = s.replace("#include <string.h>\n", "#include <string.h>\n#include <strings.h>\n", 1)
+open(p, "w").write(s)
+p = root + "/glib/gstrfuncs.c"
+s = open(p).read()
+if "#include <strings.h>" not in s:
+    s = s.replace("#include <string.h>\n", "#include <string.h>\n#include <strings.h>\n", 1)
+open(p, "w").write(s)
+p = root + "/glib/gunicollate.c"
+s = open(p).read()
+s = re.sub(r"xfrm_len = strxfrm \(NULL, str_norm, 0\);",
+           "{ char _dummy[1]; xfrm_len = strxfrm (_dummy, str_norm, 0); }", s)
+s = re.sub(r"xfrm_len = strxfrm \(NULL, str_locale, 0\);",
+           "{ char _dummy[1]; xfrm_len = strxfrm (_dummy, str_locale, 0); }", s)
+open(p, "w").write(s)
+p = root + "/gio/gunixconnection.c"
+s = open(p).read()
+s = s.replace('#include "glibintl.h"\n', '#include "glibintl.h"\n#ifdef dngettext\n#undef dngettext\n#endif\n', 1)
+open(p, "w").write(s)
+p = root + "/glib/gthread-posix.c"
+s = open(p).read()
+s = s.replace("  pthread_mutexattr_init (&attr);\n  pthread_mutexattr_settype (&attr, PTHREAD_MUTEX_RECURSIVE);\n  pthread_mutex_init (mutex, &attr);",
+              "  pthread_mutexattr_init (&attr);\n  /* dietlibc lacks pthread_mutexattr_settype; skip */\n  pthread_mutex_init (mutex, &attr);")
+s = s.replace("#else\n#error Cannot support GCond on your platform.\n#endif",
+              "#else\n/* dietlibc: no monotonic clock; use default */\n#endif")
+open(p, "w").write(s)
+p = root + "/glib/gspawn.c"
+s = open(p).read()
+s = s.replace("while ((nread = syscall (SYS_getdents64, dir_fd, buf, sizeof(buf))) > 0)",
+              "while ((nread = getdents64 (dir_fd, (struct dirent64 *) buf, sizeof(buf))) > 0)")
+open(p, "w").write(s)
+p = root + "/gio/gthreadedresolver.c"
+s = open(p).read()
+if '#include <sys/types.h>\n\n#ifndef GETSHORT' not in s:
+    s = s.replace('#include "gnetworkingprivate.h"\n',
+                  '#include "gnetworkingprivate.h"\n#include <sys/types.h>\n\n#ifndef GETSHORT\n#define GETSHORT(s, cp) do { const u_char *t_cp = (const u_char *)(cp); (s) = ((uint16_t)t_cp[0] << 8) | ((uint16_t)t_cp[1]); (cp) += 2; } while(0)\n#endif\n#ifndef GETLONG\n#define GETLONG(l, cp) do { const u_char *t_cp = (const u_char *)(cp); (l) = ((uint32_t)t_cp[0] << 24) | ((uint32_t)t_cp[1] << 16) | ((uint32_t)t_cp[2] << 8) | ((uint32_t)t_cp[3]); (cp) += 4; } while(0)\n#endif\n', 1)
+open(p, "w").write(s)
+p = root + "/gio/gsettingsschema.c"
+s = open(p).read()
+s = s.replace("  if (schema->gettext_domain)\n    bind_textdomain_codeset (schema->gettext_domain, \"UTF-8\");",
+              "  if (schema->gettext_domain)\n    { /* dietlibc lacks bind_textdomain_codeset; no-op */ }")
+open(p, "w").write(s)
+print("patched")
+PY
+
+    # Keep host compiler fallback headers after the dietlibc include paths so
+    # that asm/ and linux/ headers resolve without replacing dietlibc.
+    local gcc_inc multiarch extra_includes=""
+    gcc_inc=$(gcc -print-file-name=include 2>/dev/null || true)
+    multiarch=$(gcc -dumpmachine 2>/dev/null || true)
+    [ -n "$gcc_inc" ] && extra_includes="$extra_includes -idirafter $gcc_inc"
+    [ -n "$multiarch" ] && extra_includes="$extra_includes -idirafter /usr/include/$multiarch"
+
+    export CFLAGS="$CFLAGS -D_BSD_SOURCE -DPTHREAD_MUTEX_RECURSIVE=PTHREAD_MUTEX_RECURSIVE_NP -DSYS_getdents64=217 -DIPV6_JOIN_GROUP=IPV6_ADD_MEMBERSHIP -DIPV6_LEAVE_GROUP=IPV6_DROP_MEMBERSHIP -D__attribute_deprecated__=__attribute__((deprecated)) -Wno-format-nonliteral $extra_includes"
+    export LDFLAGS="$LDFLAGS -lpthread -ldietcompat -lm"
+
+    meson setup build \
+        --prefix=/usr \
+        --libdir=lib \
+        --buildtype=release \
+        --default-library=static \
+        -Dlibmount=false \
+        -Dinternal_pcre=true \
+        -Dselinux=disabled \
+        -Dman=false \
+        -Dgtk_doc=false \
+        -Dtests=false \
+        || { cat build/meson-logs/meson-log.txt 2>/dev/null; return 1; }
+
+    # Host tools from GLib are unstable under dietlibc; build the libraries
+    # only (same approach as CLEANUX).
+    ninja -C build glib/libglib-2.0.a gobject/libgobject-2.0.a gio/libgio-2.0.a
+
+    install -d "$DESTDIR/usr/lib" "$DESTDIR/usr/include/glib-2.0" \
+        "$DESTDIR/usr/include/glib-2.0/glib/deprecated" \
+        "$DESTDIR/usr/include/glib-2.0/gobject" \
+        "$DESTDIR/usr/include/glib-2.0/gio" \
+        "$DESTDIR/usr/lib/glib-2.0/include" \
+        "$DESTDIR/usr/lib/pkgconfig"
+    install -m644 build/glib/libglib-2.0.a "$DESTDIR/usr/lib/"
+    install -m644 build/gobject/libgobject-2.0.a "$DESTDIR/usr/lib/"
+    install -m644 build/gio/libgio-2.0.a "$DESTDIR/usr/lib/"
+    cp glib/*.h "$DESTDIR/usr/include/glib-2.0/glib/"
+    cp glib/glib.h "$DESTDIR/usr/include/glib-2.0/" 2>/dev/null || true
+    cp glib/deprecated/*.h "$DESTDIR/usr/include/glib-2.0/glib/deprecated/" 2>/dev/null || true
+    cp gobject/*.h "$DESTDIR/usr/include/glib-2.0/gobject/"
+    cp gobject/glib-object.h "$DESTDIR/usr/include/glib-2.0/" 2>/dev/null || true
+    cp build/gobject/glib-enumtypes.h "$DESTDIR/usr/include/glib-2.0/gobject/" 2>/dev/null || true
+    cp gio/*.h "$DESTDIR/usr/include/glib-2.0/gio/"
+    cp build/glib/glibconfig.h "$DESTDIR/usr/lib/glib-2.0/include/"
+
+    cat > "$DESTDIR/usr/lib/pkgconfig/glib-2.0.pc" <<EOF
+prefix=/usr
+includedir=\${prefix}/include
+libdir=\${prefix}/lib
+
+Name: GLib
+Description: C Utility Library
+Version: $PACKAGE_VERSION
+Libs: -L\${libdir} -lglib-2.0 -lpthread
+Cflags: -I\${includedir}/glib-2.0 -I\${libdir}/glib-2.0/include
+EOF
+    cat > "$DESTDIR/usr/lib/pkgconfig/gobject-2.0.pc" <<EOF
+prefix=/usr
+includedir=\${prefix}/include
+libdir=\${prefix}/lib
+
+Name: GObject
+Description: GLib Type, Object, Parameter and Signal Library
+Version: $PACKAGE_VERSION
+Requires: glib-2.0
+Libs: -L\${libdir} -lgobject-2.0
+Cflags: -I\${includedir}/glib-2.0 -I\${libdir}/glib-2.0/include
+EOF
+    cat > "$DESTDIR/usr/lib/pkgconfig/gio-2.0.pc" <<EOF
+prefix=/usr
+includedir=\${prefix}/include
+libdir=\${prefix}/lib
+
+Name: GIO
+Description: glib I/O library
+Version: $PACKAGE_VERSION
+Requires: glib-2.0 gobject-2.0
+Libs: -L\${libdir} -lgio-2.0
+Cflags: -I\${includedir}/glib-2.0 -I\${libdir}/glib-2.0/include
+EOF
+}

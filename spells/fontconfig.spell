@@ -1,0 +1,31 @@
+# fontconfig built with dietlibc (dependency for xorg-server)
+# Ported from CLEANUX (2026-11-08).
+PACKAGE_NAME="fontconfig"
+PACKAGE_VERSION="2.15.0"
+PACKAGE_RELEASE="1"
+
+DEPENDENCIES=("freetype" "expat")
+EXTERNAL_DEPENDENCIES=("gperf")
+SOURCE_URL="https://www.freedesktop.org/software/fontconfig/release/fontconfig-2.15.0.tar.xz"
+SOURCE_HASH="63a0658d0e06e0fa886106452b58ef04f21f58202ea02a94c39de0d3335d7c0e"
+
+BUILD_STYLE="configure"
+LANGUAGE="c"
+FALLBACK_ALLOWED=0
+USE_DIETCOMPAT=1
+
+build() {
+    log "Configuring ${PACKAGE_NAME} with $CC"
+    ./configure \
+        --prefix=/usr \
+        --build="$(gcc -dumpmachine)" \
+        --disable-shared \
+        --enable-static \
+        --disable-docs \
+        --disable-nls \
+        CC="$CC" \
+        CFLAGS="${CFLAGS:-}" \
+        LDFLAGS="${LDFLAGS:-}"
+    make -j"${JOBS:-$(nproc)}"
+    make DESTDIR="$DESTDIR" install
+}

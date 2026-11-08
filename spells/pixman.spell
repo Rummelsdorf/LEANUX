@@ -1,0 +1,39 @@
+# pixman built with dietlibc (dependency for xorg-server)
+# Ported from CLEANUX (2026-11-08).
+PACKAGE_NAME="pixman"
+PACKAGE_VERSION="0.43.4"
+PACKAGE_RELEASE="1"
+
+DEPENDENCIES=()
+EXTERNAL_DEPENDENCIES=()
+SOURCE_URL="https://www.x.org/releases/individual/lib/pixman-0.43.4.tar.gz"
+SOURCE_HASH="a0624db90180c7ddb79fc7a9151093dc37c646d8c38d3f232f767cf64b85a226"
+
+BUILD_STYLE="meson"
+LANGUAGE="c"
+FALLBACK_ALLOWED=0
+USE_DIETCOMPAT=1
+
+build() {
+    log "Configuring ${PACKAGE_NAME} with $CC (meson)"
+    meson setup build \
+        --prefix=/usr \
+        --libdir=lib \
+        --buildtype=release \
+        --default-library=static \
+        -Dmmx=disabled \
+        -Dsse2=disabled \
+        -Dssse3=disabled \
+        -Dvmx=disabled \
+        -Darm-simd=disabled \
+        -Dneon=disabled \
+        -Da64-neon=disabled \
+        -Diwmmxt=disabled \
+        -Dmips-dspr2=disabled \
+        -Dloongson-mmi=disabled \
+        -Dtests=disabled \
+        -Ddemos=disabled \
+        || { cat build/meson-logs/meson-log.txt 2>/dev/null; return 1; }
+    ninja -C build
+    DESTDIR="$DESTDIR" meson install -C build
+}

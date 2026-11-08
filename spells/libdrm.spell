@@ -1,0 +1,30 @@
+# libdrm (dependency for mesa/xorg-server)
+# Ported from CLEANUX (2026-11-08).
+PACKAGE_NAME="libdrm"
+PACKAGE_VERSION="2.4.123"
+PACKAGE_RELEASE="1"
+
+DEPENDENCIES=()
+EXTERNAL_DEPENDENCIES=()
+SOURCE_URL="https://dri.freedesktop.org/libdrm/libdrm-2.4.123.tar.xz"
+SOURCE_HASH="PLACEHOLDER_HASH"
+
+BUILD_STYLE="meson"
+LANGUAGE="c"
+FALLBACK_ALLOWED=0
+USE_DIETCOMPAT=1
+
+build() {
+    log "Configuring ${PACKAGE_NAME} with $CC (meson)"
+    meson setup build \
+        --prefix=/usr \
+        --libdir=lib \
+        --buildtype=release \
+        --default-library=static \
+        -Dtests=false \
+        -Dman-pages=disabled \
+        -Dvalgrind=disabled \
+        || { cat build/meson-logs/meson-log.txt 2>/dev/null; return 1; }
+    ninja -C build
+    DESTDIR="$DESTDIR" meson install -C build
+}

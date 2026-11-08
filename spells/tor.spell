@@ -1,0 +1,30 @@
+# Tor built with dietlibc for CLEANUX (anonymous networking)
+# Ported from CLEANUX (2026-11-08).
+PACKAGE_NAME="tor"
+PACKAGE_VERSION="0.4.8.12"
+PACKAGE_RELEASE="1"
+
+DEPENDENCIES=("zlib" "openssl" "libevent" "xz")
+EXTERNAL_DEPENDENCIES=()
+SOURCE_URL="https://dist.torproject.org/tor-0.4.8.12.tar.gz"
+SOURCE_HASH="PLACEHOLDER_HASH"
+
+BUILD_STYLE="configure"
+LANGUAGE="c"
+FALLBACK_ALLOWED=0
+USE_DIETCOMPAT=1
+
+build() {
+    log "Configuring ${PACKAGE_NAME} with $CC"
+    ./configure \
+        --prefix=/usr \
+        --build="$(gcc -dumpmachine)" \
+        --disable-asciidoc \
+        --disable-systemd \
+        --disable-seccomp \
+        CC="$CC" \
+        CFLAGS="${CFLAGS:-}" \
+        LDFLAGS="${LDFLAGS:-}"
+    make -j"${JOBS:-$(nproc)}"
+    make DESTDIR="$DESTDIR" install
+}

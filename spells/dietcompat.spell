@@ -1,0 +1,21 @@
+# dietcompat – dietlibc compatibility shim (ported from CLEANUX src/_compat)
+# Ported from CLEANUX (2026-11-08).
+PACKAGE_NAME="dietcompat"
+PACKAGE_VERSION="1"
+PACKAGE_RELEASE="1"
+
+DEPENDENCIES=()
+EXTERNAL_DEPENDENCIES=()
+SOURCE_URL=""
+
+BUILD_STYLE="custom"
+LANGUAGE="c"
+FALLBACK_ALLOWED=0
+USE_DIETCOMPAT=0
+
+build() {
+    log "Building dietlibc compatibility shim with $CC"
+    install -d "$DESTDIR/usr/lib"
+    "$CC" -O2 -fPIC -c "$LEANUX_ROOT/compat/dietcompat.c" -o dietcompat.o
+    ar rcs "$DESTDIR/usr/lib/libdietcompat.a" dietcompat.o
+}

@@ -1,0 +1,29 @@
+# libXi (dependency for X server/MATE)
+# Ported from CLEANUX (2026-11-08).
+PACKAGE_NAME="libXi"
+PACKAGE_VERSION="1.8.1"
+PACKAGE_RELEASE="1"
+
+DEPENDENCIES=("xorgproto" "libX11" "libXext" "libXfixes")
+EXTERNAL_DEPENDENCIES=()
+SOURCE_URL="https://www.x.org/releases/individual/lib/libXi-1.8.1.tar.xz"
+SOURCE_HASH="PLACEHOLDER_HASH"
+
+BUILD_STYLE="configure"
+LANGUAGE="c"
+FALLBACK_ALLOWED=0
+USE_DIETCOMPAT=1
+
+build() {
+    log "Configuring ${PACKAGE_NAME} with $CC"
+    ./configure \
+        --prefix=/usr \
+        --build="$(gcc -dumpmachine)" \
+        --disable-shared \
+        --enable-static \
+        CC="$CC" \
+        CFLAGS="${CFLAGS:-}" \
+        LDFLAGS="${LDFLAGS:-}"
+    make -j"${JOBS:-$(nproc)}"
+    make DESTDIR="$DESTDIR" install
+}

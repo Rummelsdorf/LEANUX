@@ -1,0 +1,35 @@
+# GTK3 (dependency for MATE desktop)
+# Ported from CLEANUX (2026-11-08).
+PACKAGE_NAME="gtk3"
+PACKAGE_VERSION="3.24.43"
+PACKAGE_RELEASE="1"
+
+DEPENDENCIES=("glib" "cairo" "pango" "atk" "gdk-pixbuf" "dbus" "fontconfig" "freetype" "libpng" "harfbuzz" "xorgproto" "libX11" "libXext" "libXrender" "libXfixes" "libXrandr" "libXi" "libXtst" "libxcb")
+EXTERNAL_DEPENDENCIES=("gettext" "itstool")
+SOURCE_URL="https://download.gnome.org/sources/gtk+/3.24/gtk+-3.24.43.tar.xz"
+SOURCE_HASH="PLACEHOLDER_HASH"
+
+BUILD_STYLE="meson"
+LANGUAGE="c"
+FALLBACK_ALLOWED=0
+USE_DIETCOMPAT=1
+
+build() {
+    log "Configuring ${PACKAGE_NAME} with $CC (meson)"
+    meson setup build \
+        --prefix=/usr \
+        --libdir=lib \
+        --buildtype=release \
+        --default-library=static \
+        -Ddemos=false \
+        -Dbuild-tests=false \
+        -Dintrospection=false \
+        -Dcolord=no \
+        -Dwayland-backend=false \
+        -Dx11-backend=true \
+        -Dprint-cups=disabled \
+        -Dcloudproviders=false \
+        || { cat build/meson-logs/meson-log.txt 2>/dev/null; return 1; }
+    ninja -C build
+    DESTDIR="$DESTDIR" meson install -C build
+}

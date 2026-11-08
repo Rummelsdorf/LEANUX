@@ -1,0 +1,36 @@
+# cURL built with dietlibc for CLEANUX (needed for local AI model downloads)
+# Ported from CLEANUX (2026-11-08).
+PACKAGE_NAME="curl"
+PACKAGE_VERSION="8.11.1"
+PACKAGE_RELEASE="1"
+
+DEPENDENCIES=("zlib" "openssl")
+EXTERNAL_DEPENDENCIES=()
+SOURCE_URL="https://curl.se/download/curl-8.11.1.tar.gz"
+SOURCE_HASH="PLACEHOLDER_HASH"
+
+BUILD_STYLE="configure"
+LANGUAGE="c"
+FALLBACK_ALLOWED=0
+USE_DIETCOMPAT=1
+
+build() {
+    log "Configuring ${PACKAGE_NAME} with $CC"
+    ./configure \
+        --prefix=/usr \
+        --build="$(gcc -dumpmachine)" \
+        --disable-shared \
+        --enable-static \
+        --with-openssl \
+        --with-zlib \
+        --disable-ldap \
+        --disable-ldaps \
+        --without-libidn2 \
+        --without-libpsl \
+        --disable-manual \
+        CC="$CC" \
+        CFLAGS="${CFLAGS:-}" \
+        LDFLAGS="${LDFLAGS:-}"
+    make -j"${JOBS:-$(nproc)}"
+    make DESTDIR="$DESTDIR" install
+}
