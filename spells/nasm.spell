@@ -20,8 +20,12 @@ build() {
         --prefix=/usr \
         --build="$(gcc -dumpmachine)" \
         CC="$CC" \
-        CFLAGS="${CFLAGS:-}" \
+        CFLAGS="${CFLAGS:-} -DHAVE_MEMPCPY=1" \
         LDFLAGS="${LDFLAGS:-}"
-    make -j"${JOBS:-$(nproc)}"
+    # libnasm.a is linked after the LDFLAGS that carry -ldietcompat, so add
+    # the shim again at the end of the link line (dietlibc builds only).
+    local libs="-lm"
+    [ "${LIBC:-dietlibc}" = dietlibc ] && libs="-ldietcompat $libs"
+    make -j"${JOBS:-$(nproc)}" LIBS="$libs"
     make DESTDIR="$DESTDIR" install
 }

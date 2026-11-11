@@ -1,0 +1,29 @@
+# LEANUX base profile – runtime without a graphical desktop.
+# The release script resolves dependencies automatically and picks the libc
+# from build/libc-selection.tsv.
+
+xcb-proto
+xorgproto
+libpthread-stubs
+dietcompat
+zlib
+xz
+expat
+libffi
+pcre2
+ncurses
+openssl
+glib
+libpng
+libxcb
+libevent
+dbus
+freetype
+fontconfig
+bash
+curl
+wget
+openssh
+tor
+python3
+mc

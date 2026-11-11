@@ -4,8 +4,8 @@ PACKAGE_NAME="xorg-server"
 PACKAGE_VERSION="21.1.13"
 PACKAGE_RELEASE="1"
 
-DEPENDENCIES=("xorgproto" "libXau" "libXdmcp" "libxcb" "libX11" "libXext" "libXrender" "libXfixes" "libXrandr" "libXi" "libXtst" "libXfont2" "libxkbfile" "libdrm" "mesa" "pixman" "fontconfig" "freetype" "dbus" "xkbcomp" "xkeyboard-config")
-EXTERNAL_DEPENDENCIES=("xtrans" "libXcomposite" "libXdamage" "libXcursor" "libXinerama" "libXmu" "libXpm" "libpciaccess")
+DEPENDENCIES=("xorgproto" "xtrans" "libXau" "libXdmcp" "libxcb" "libX11" "libXext" "libXrender" "libXfixes" "libXrandr" "libXi" "libXtst" "libXfont2" "libxkbfile" "libdrm" "mesa" "pixman" "fontconfig" "freetype" "dbus" "xkbcomp" "xkeyboard-config")
+EXTERNAL_DEPENDENCIES=("libXcomposite" "libXdamage" "libXcursor" "libXinerama" "libXmu" "libXpm" "libpciaccess")
 SOURCE_URL="https://www.x.org/releases/individual/xserver/xorg-server-21.1.13.tar.xz"
 SOURCE_HASH="PLACEHOLDER_HASH"
 

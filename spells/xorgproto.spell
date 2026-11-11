@@ -22,6 +22,15 @@ build() {
         CC="$CC" \
         CFLAGS="${CFLAGS:-}" \
         LDFLAGS="${LDFLAGS:-}"
+    # Xfuncs.h exports bzero()/bcopy() as function-like macros.  That pollutes
+    # later declarations in <strings.h> (and any project header including it)
+    # because dietlibc declares the same functions.  Prefer the libc functions.
+    sed -i \
+        -e '/#  undef bzero/d' \
+        -e '/#  define bzero(b,len) memset(b,0,len)/d' \
+        -e '/#   define bzero(b,len) memset(b, 0, len)/d' \
+        -e '/#   define bcmp(b1,b2,len) memcmp(b1, b2, len)/d' \
+        include/X11/Xfuncs.h
     make -j"${JOBS:-$(nproc)}"
     make DESTDIR="$DESTDIR" install
 }

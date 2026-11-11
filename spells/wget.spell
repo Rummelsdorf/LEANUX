@@ -1,12 +1,12 @@
 # GNU wget built with dietlibc for CLEANUX (fallback download tool)
 # Ported from CLEANUX (2026-11-08).
 PACKAGE_NAME="wget"
-PACKAGE_VERSION="1.25.5"
+PACKAGE_VERSION="1.25.0"
 PACKAGE_RELEASE="1"
 
 DEPENDENCIES=("zlib" "openssl")
 EXTERNAL_DEPENDENCIES=()
-SOURCE_URL="https://ftp.gnu.org/gnu/wget/wget-1.25.5.tar.gz"
+SOURCE_URL="https://ftp.gnu.org/gnu/wget/wget-1.25.0.tar.gz"
 SOURCE_HASH="PLACEHOLDER_HASH"
 
 BUILD_STYLE="configure"
@@ -16,6 +16,8 @@ USE_DIETCOMPAT=1
 
 build() {
     log "Configuring ${PACKAGE_NAME} with $CC"
+    local wget_cflags="${CFLAGS:-}"
+    [ "${LIBC:-dietlibc}" = dietlibc ] && wget_cflags="$wget_cflags -D_PC_NAME_MAX=3"
     ./configure \
         --prefix=/usr \
         --build="$(gcc -dumpmachine)" \
@@ -26,8 +28,17 @@ build() {
         --without-libpsl \
         --disable-iri \
         CC="$CC" \
-        CFLAGS="${CFLAGS:-}" \
+        CFLAGS="$wget_cflags" \
         LDFLAGS="${LDFLAGS:-}"
+    # gnulib's generated config.h undefines assert, and the static link needs
+    # the compat library after OpenSSL's archives.  Fix both in the generated
+    # files for this build.
+    sed -i 's|#undef/\*\*/assert|/* assert is provided by <assert.h> */|' src/config.h
+    if [ "${LIBC:-dietlibc}" = dietlibc ]; then
+        sed -i 's|^LIBS = \(.*\)$|LIBS = \1 -ldietcompat -lm -lpthread|' Makefile src/Makefile
+    else
+        sed -i 's|^LIBS = \(.*\)$|LIBS = \1 -lm -lpthread|' Makefile src/Makefile
+    fi
     make -j"${JOBS:-$(nproc)}"
     make DESTDIR="$DESTDIR" install
 }

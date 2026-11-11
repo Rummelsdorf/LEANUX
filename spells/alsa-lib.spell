@@ -16,6 +16,16 @@ USE_DIETCOMPAT=1
 
 build() {
     log "Configuring ${PACKAGE_NAME} with $CC"
+    # ALSA falls back to dirent64/stat64 aliases when the system has no LFS.
+    # Include the real headers first so the aliases do not rewrite the struct
+    # definitions when they are included later, and use alphasort because
+    # dietlibc has no versionsort().
+    local alsa_cflags="${CFLAGS:-}"
+    if [ "${LIBC:-dietlibc}" = dietlibc ]; then
+        sed -i '/^#ifndef HAVE_LFS$/i #include <sys/stat.h>\n#include <dirent.h>' include/local.h
+        sed -i 's/^#define versionsort64 versionsort$/#define versionsort64 alphasort/' include/local.h
+        alsa_cflags="$alsa_cflags -D__bitwise= -D__kernel_pid_t=int -D__kernel_off_t=long -D_SC_PAGE_SIZE=_SC_PAGESIZE"
+    fi
     ./configure \
         --prefix=/usr \
         --build="$(gcc -dumpmachine)" \
@@ -24,8 +34,14 @@ build() {
         --disable-python \
         --disable-docs \
         CC="$CC" \
-        CFLAGS="${CFLAGS:-}" \
+        CFLAGS="$alsa_cflags" \
         LDFLAGS="${LDFLAGS:-}"
+    # The LFS probe succeeds spuriously against dietlibc's headers, but the
+    # 64-bit aliases are not actually available on x86-64.  Use ALSA's own
+    # fallback mapping instead.
+    if [ "${LIBC:-dietlibc}" = dietlibc ]; then
+        sed -i 's/^#define HAVE_LFS 1$/#undef HAVE_LFS/' include/config.h
+    fi
     make -j"${JOBS:-$(nproc)}"
     make DESTDIR="$DESTDIR" install
 }

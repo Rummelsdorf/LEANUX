@@ -16,10 +16,17 @@ USE_DIETCOMPAT=1
 
 build() {
     log "Configuring OpenSSL with $CC"
+    # dietlibc does not export the generic syscall() wrapper.  Use the
+    # dedicated getrandom() function instead of the raw syscall.
+    sed -i \
+        -e 's|^# include <sys/syscall.h>$|# include <sys/syscall.h>\n# include <sys/random.h>|' \
+        -e 's|return syscall(__NR_getrandom, buf, buflen, 0);|return getrandom(buf, buflen, 0);|' \
+        providers/implementations/rands/seeding/rand_unix.c
     ./Configure linux-x86_64 \
-        no-shared no-threads no-dso no-afalgeng no-apps no-tests \
+        no-shared no-dso no-afalgeng no-apps no-tests \
         --prefix=/usr --openssldir=/etc/ssl --libdir=lib \
-        CC="$CC" CFLAGS="${CFLAGS:-}" LDFLAGS="${LDFLAGS:-}"
+        CC="$CC" CFLAGS="${CFLAGS:-}" \
+        LDFLAGS="$(printf '%s' "${LDFLAGS:-}" | sed 's/\(^\| \)-static\( \|$\)/\1\2/g')"
     make -j"${JOBS:-$(nproc)}"
     make DESTDIR="$DESTDIR" install_sw
 }

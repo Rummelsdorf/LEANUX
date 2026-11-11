@@ -4,8 +4,8 @@ PACKAGE_NAME="libX11"
 PACKAGE_VERSION="1.8.10"
 PACKAGE_RELEASE="1"
 
-DEPENDENCIES=("xorgproto" "libxcb" "libXau" "libXdmcp")
-EXTERNAL_DEPENDENCIES=("xtrans")
+DEPENDENCIES=("xorgproto" "libxcb" "libXau" "libXdmcp" "xtrans")
+EXTERNAL_DEPENDENCIES=()
 SOURCE_URL="https://www.x.org/releases/individual/lib/libX11-1.8.10.tar.xz"
 SOURCE_HASH="PLACEHOLDER_HASH"
 
@@ -16,6 +16,9 @@ USE_DIETCOMPAT=1
 
 build() {
     log "Configuring ${PACKAGE_NAME} with $CC"
+    # dietlibc declares the 5-argument (BSD-style) getpwnam_r/getpwuid_r.
+    # Xos_r.h selects the 4-argument POSIX variants unless the thread-safe
+    # feature macro is set, so force the compatible branch.
     ./configure \
         --prefix=/usr \
         --build="$(gcc -dumpmachine)" \
@@ -24,7 +27,7 @@ build() {
         --disable-specs \
         --disable-devel-docs \
         CC="$CC" \
-        CFLAGS="${CFLAGS:-}" \
+        CFLAGS="${CFLAGS:-} -D_POSIX_THREAD_SAFE_FUNCTIONS" \
         LDFLAGS="${LDFLAGS:-}"
     make -j"${JOBS:-$(nproc)}"
     make DESTDIR="$DESTDIR" install

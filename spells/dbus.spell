@@ -16,8 +16,10 @@ USE_DIETCOMPAT=1
 
 build() {
     log "Configuring ${PACKAGE_NAME} with $CC"
-    export CFLAGS="${CFLAGS:-} -D_BSD_SOURCE -DPTHREAD_MUTEX_RECURSIVE=PTHREAD_MUTEX_RECURSIVE_NP"
-    THREAD_LIBS="-lpthread -ldietcompat" \
+    if [ "${LIBC:-dietlibc}" = dietlibc ]; then
+        export CFLAGS="${CFLAGS:-} -D_BSD_SOURCE -DPTHREAD_MUTEX_RECURSIVE=PTHREAD_MUTEX_RECURSIVE_NP"
+    fi
+    THREAD_LIBS="$([ "${LIBC:-dietlibc}" = dietlibc ] && echo '-lpthread -ldietcompat' || echo '-lpthread')" \
     ./configure \
         --prefix=/usr \
         --build="$(gcc -dumpmachine)" \

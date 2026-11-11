@@ -16,6 +16,33 @@ USE_DIETCOMPAT=1
 
 build() {
     log "Configuring ${PACKAGE_NAME} with $CC (meson)"
+    # pixops.c uses lrint() without including <math.h>; the function itself is
+    # provided by dietcompat, so only the -Werror diagnostic needs relaxing.
+    # (Project flags add -Werror=implicit later; the more specific
+    # -Wno-implicit-function-declaration still wins.)
+    export CFLAGS="${CFLAGS:-} -Wno-implicit-function-declaration"
+    # Upstream builds the loaders as static libraries and links them into
+    # libgdk_pixbuf, but the dependency metadata only carries link_with.
+    # Propagate the loader dependencies (libpng, ...) to executables so the
+    # static link pulls in -lpng16.
+    sed -i 's/included_loaders_deps += declare_dependency(link_with: mod)/included_loaders_deps += declare_dependency(link_with: mod, dependencies: loaders_deps + gdk_pixbuf_deps)/' \
+        gdk-pixbuf/meson.build
+    # The generated loaders.cache is only needed for the test suite.  The
+    # statically linked query-loaders binary cannot run under dietlibc, so
+    # generate a placeholder cache instead of executing it.
+    python3 - <<'PY'
+from pathlib import Path
+p = Path('gdk-pixbuf/meson.build')
+s = p.read_text()
+old = """command: [
+                                  gdk_pixbuf_query_loaders,
+                                  dynamic_loaders,
+                                ],"""
+new = "command: [find_program('sh'), '-c', 'echo'],"
+if old not in s:
+    raise SystemExit('loaders.cache command block not found')
+p.write_text(s.replace(old, new))
+PY
     meson setup build \
         --prefix=/usr \
         --libdir=lib \

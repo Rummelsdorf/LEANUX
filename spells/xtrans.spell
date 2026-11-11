@@ -1,0 +1,28 @@
+# xtrans – X transport library headers (dependency for libX11 and X clients)
+# Ported from CLEANUX (2026-11-08), added as an explicit build dependency:
+# xtrans ships only headers and a pkg-config file, but libX11 requires it.
+PACKAGE_NAME="xtrans"
+PACKAGE_VERSION="1.6.0"
+PACKAGE_RELEASE="1"
+
+DEPENDENCIES=()
+EXTERNAL_DEPENDENCIES=()
+SOURCE_URL="https://www.x.org/releases/individual/lib/xtrans-1.6.0.tar.xz"
+SOURCE_HASH="PLACEHOLDER_HASH"
+
+BUILD_STYLE="configure"
+LANGUAGE="c"
+FALLBACK_ALLOWED=0
+USE_DIETCOMPAT=0
+
+build() {
+    log "Configuring ${PACKAGE_NAME} with $CC"
+    ./configure \
+        --prefix=/usr \
+        --build="$(gcc -dumpmachine)" \
+        CC="$CC" \
+        CFLAGS="${CFLAGS:-}" \
+        LDFLAGS="${LDFLAGS:-}"
+    make -j"${JOBS:-$(nproc)}"
+    make DESTDIR="$DESTDIR" install
+}

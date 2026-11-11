@@ -6,7 +6,7 @@ PACKAGE_RELEASE="1"
 
 DEPENDENCIES=("glib" "dbus" "zlib" "libpng" "harfbuzz" "openssl" "fontconfig" "freetype" "xorgproto" "libxcb" "libX11" "libXext" "libXrender" "libXfixes" "libXi" "libXtst")
 EXTERNAL_DEPENDENCIES=("perl" "python3")
-SOURCE_URL="https://download.qt.io/official_releases/qt/6.8/6.8.1/submodules/qtbase-everywhere-src-6.8.1.tar.xz"
+SOURCE_URL="https://download.qt.io/archive/qt/6.8/6.8.1/submodules/qtbase-everywhere-src-6.8.1.tar.xz"
 SOURCE_HASH="PLACEHOLDER_HASH"
 
 BUILD_STYLE="custom"

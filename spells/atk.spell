@@ -1,12 +1,12 @@
 # atk (dependency for gtk3)
 # Ported from CLEANUX (2026-11-08).
 PACKAGE_NAME="atk"
-PACKAGE_VERSION="2.54.0"
+PACKAGE_VERSION="2.38.0"
 PACKAGE_RELEASE="1"
 
 DEPENDENCIES=("glib")
 EXTERNAL_DEPENDENCIES=()
-SOURCE_URL="https://download.gnome.org/sources/atk/2.54/atk-2.54.0.tar.xz"
+SOURCE_URL="https://download.gnome.org/sources/atk/2.38/atk-2.38.0.tar.xz"
 SOURCE_HASH="PLACEHOLDER_HASH"
 
 BUILD_STYLE="meson"
@@ -21,7 +21,7 @@ build() {
         --libdir=lib \
         --buildtype=release \
         --default-library=static \
-        -Dintrospection=disabled \
+        -Dintrospection=false \
         -Ddocs=false \
         || { cat build/meson-logs/meson-log.txt 2>/dev/null; return 1; }
     ninja -C build

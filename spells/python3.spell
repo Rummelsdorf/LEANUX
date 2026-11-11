@@ -13,6 +13,10 @@ BUILD_STYLE="configure"
 LANGUAGE="c"
 FALLBACK_ALLOWED=1
 USE_DIETCOMPAT=1
+# CPython builds loadable extension modules with `gcc -shared`; -static in
+# LDFLAGS breaks that link step. The binary is still linked against the glibc
+# runtime, which the release script copies into the image.
+STATIC_BUILD=0
 
 build() {
     log "Configuring ${PACKAGE_NAME} with $CC"

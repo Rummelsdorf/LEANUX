@@ -25,6 +25,22 @@ echo "========================="
 # ---------------------------------------------------------------------------
 check "cast.sh syntax" bash -n spells/cast.sh
 check "bootstrap/dietlibc.sh syntax" bash -n bootstrap/dietlibc.sh
+check "compile-all.sh syntax" bash -n tests/compile-all.sh
+check "compare-libc.sh syntax" bash -n tests/compare-libc.sh
+check "build-release.sh syntax" bash -n tests/build-release.sh
+check "fetch_sources.py syntax" python3 -m py_compile tools/fetch_sources.py
+check "compile_report.py syntax" python3 -m py_compile tools/compile_report.py
+check "compare_report.py syntax" python3 -m py_compile tools/compare_report.py
+check "select_libc.py syntax" python3 -m py_compile tools/select_libc.py
+check "make_localrepo.py syntax" python3 -m py_compile tools/make_localrepo.py
+check "collect_runtime_deps.py syntax" python3 -m py_compile tools/collect_runtime_deps.py
+check "full_report.py syntax" python3 -m py_compile tools/full_report.py
+check "fetch selection matches world.order" \
+    test "$(python3 tools/fetch_sources.py --list --selection world | wc -l)" \
+         -eq "$(grep -vcE '^[[:space:]]*(#|$)' build/world.order)"
+check "xtrans is part of the world order" grep -qx xtrans build/world.order
+check "libX11 resolves xtrans as a build dependency" \
+    bash -c './spells/cast.sh --dry-run libX11 2>/dev/null | grep -qx xtrans'
 
 # ---------------------------------------------------------------------------
 # 2. Configuration uses dietlibc, not glibc
@@ -247,6 +263,182 @@ else
 fi
 
 rm -rf "$TMP_SPELLS" "$ROOT/sysroot/install/fallback_pkg" "$ROOT/sysroot/install/no_fallback"
+
+# ---------------------------------------------------------------------------
+# 9. glibc mode skips dietcompat and writes a glibc marker
+# ---------------------------------------------------------------------------
+TMP_SPELLS=$(mktemp -d)
+GLIBC_TEST=$(mktemp -d)
+cat > "$TMP_SPELLS/glibc_pkg.spell" <<'EOF'
+PACKAGE_NAME="glibc_pkg"
+DEPENDENCIES=()
+EXTERNAL_DEPENDENCIES=()
+SOURCE_URL=""
+USE_DIETCOMPAT=1
+build() {
+    log "glibc test build with $CC"
+    install -d "$DESTDIR/usr/bin"
+    printf 'glibc-test\n' > "$DESTDIR/usr/bin/glibc_pkg"
+}
+EOF
+
+if SPELL_DIR="$TMP_SPELLS" STAGING_DIR="$GLIBC_TEST/sysroot" \
+        BUILD_ROOT="$GLIBC_TEST/build" HOSTCC=gcc \
+        ./spells/cast.sh --libc glibc glibc_pkg >/tmp/leanux-glibc.log 2>&1; then
+    pass "glibc mode builds a spell"
+else
+    fail "glibc mode builds a spell"
+    sed -n '1,15p' /tmp/leanux-glibc.log
+fi
+
+if [ "$(cat "$GLIBC_TEST/sysroot/install/glibc_pkg/.libc" 2>/dev/null)" = "glibc" ]; then
+    pass "glibc mode writes the glibc marker"
+else
+    fail "glibc mode writes the glibc marker"
+fi
+
+if [ ! -e "$GLIBC_TEST/sysroot/install/dietcompat" ]; then
+    pass "glibc mode does not build dietcompat"
+else
+    fail "glibc mode does not build dietcompat"
+fi
+
+rm -rf "$TMP_SPELLS" "$GLIBC_TEST"
+
+# ---------------------------------------------------------------------------
+# 10. Size comparison helpers
+# ---------------------------------------------------------------------------
+SIZE_TEST=$(mktemp -d)
+mkdir -p "$SIZE_TEST/stage/usr/bin" "$SIZE_TEST/stage/usr/share/man/man1"
+printf '1234567890' > "$SIZE_TEST/stage/usr/bin/tool"
+printf 'ignored documentation' > "$SIZE_TEST/stage/usr/share/man/man1/tool.1"
+printf 'dietlibc\n' > "$SIZE_TEST/stage/.libc"
+printf '' > "$SIZE_TEST/stage/.built"
+
+MEASURE=$(python3 tools/compare_report.py measure --stage "$SIZE_TEST/stage" 2>/dev/null || true)
+if [ "$MEASURE" = "$(printf '10\t1')" ]; then
+    pass "artifact measurement ignores docs and markers"
+else
+    fail "artifact measurement ignores docs and markers (got: $MEASURE)"
+fi
+
+cat > "$SIZE_TEST/libc-size-comparison.tsv" <<'EOF'
+# package	diet_result	glibc_result	diet_bytes	glibc_bytes	diff_bytes	ratio	diet_files	glibc_files	seconds	reason	log
+zlib	PASS (dietlibc)	PASS	1000	1500	500	1.5	1	1	1		log
+EOF
+if python3 tools/compare_report.py render \
+        --tsv "$SIZE_TEST/libc-size-comparison.tsv" --md "$SIZE_TEST/comparison.md" \
+        && grep -q 'Size comparison: dietlibc vs glibc' "$SIZE_TEST/comparison.md" \
+        && grep -q '| `zlib` |' "$SIZE_TEST/comparison.md"; then
+    pass "size comparison renders a Markdown table"
+else
+    fail "size comparison renders a Markdown table"
+fi
+
+cat > "$SIZE_TEST/matrix.tsv" <<'EOF'
+# index	package	result	libc	seconds	exit	reason	log
+# started=2026-01-01T00:00:00 selection=only mode=force timeout=900 host=test jobs=4
+1	zlib	PASS (dietlibc)	dietlibc	2	0		compile-logs/zlib.log
+EOF
+touch -t 202601010000 "$SIZE_TEST/matrix.tsv"
+touch -t 202601010001 "$SIZE_TEST/libc-size-comparison.tsv"
+if python3 tools/compile_report.py \
+        --tsv "$SIZE_TEST/matrix.tsv" --md "$SIZE_TEST/matrix.md" --quiet \
+        && grep -q 'Size comparison: dietlibc vs glibc' "$SIZE_TEST/matrix.md" \
+        && grep -q 'Selection: `only`' "$SIZE_TEST/matrix.md"; then
+    pass "main report picks up the size comparison"
+else
+    fail "main report picks up the size comparison"
+fi
+
+cp "$SIZE_TEST/matrix.tsv" "$SIZE_TEST/compile-matrix.tsv"
+if python3 tools/full_report.py --report-dir "$SIZE_TEST" \
+        --out "$SIZE_TEST/result.md" >/dev/null \
+        && grep -qF 'LEANUX – Kompilier- und Größenvergleich' "$SIZE_TEST/result.md" \
+        && grep -qF '| PASS insgesamt | 1 |' "$SIZE_TEST/result.md" \
+        && grep -qF '| **Gesamt (1)** |' "$SIZE_TEST/result.md"; then
+    pass "consolidated result file contains matrix and comparison"
+else
+    fail "consolidated result file contains matrix and comparison"
+fi
+
+# Per-package libc selection: dietlibc only wins when it is strictly smaller.
+SEL_TEST=$(mktemp -d)
+cat > "$SEL_TEST/matrix.tsv" <<'EOF'
+# index	package	result	libc	seconds	exit	reason	log
+# started=2026-01-01T00:00:00 selection=only mode=force timeout=900 host=test jobs=4
+1	small	PASS (dietlibc)	dietlibc	1	0		log
+2	big	PASS (dietlibc)	dietlibc	1	0		log
+3	failed	FAIL	dietlibc	1	1		dietlibc build failed	log
+EOF
+cat > "$SEL_TEST/comparison.tsv" <<'EOF'
+# package	diet_result	glibc_result	diet_bytes	glibc_bytes	diff_bytes	ratio	diet_files	glibc_files	seconds	reason	log
+small	PASS (dietlibc)	PASS	100	200	100	2.0	1	1	1		log
+big	PASS (dietlibc)	PASS	300	200	-100	0.6667	1	1	1		log
+EOF
+if python3 tools/select_libc.py --matrix "$SEL_TEST/matrix.tsv" \
+        --comparison "$SEL_TEST/comparison.tsv" --out-dir "$SEL_TEST" --quiet \
+        && awk -F'\t' '$1=="small" && $2=="dietlibc"' "$SEL_TEST/libc-selection.tsv" | grep -q . \
+        && awk -F'\t' '$1=="big" && $2=="glibc"' "$SEL_TEST/libc-selection.tsv" | grep -q . \
+        && awk -F'\t' '$1=="failed" && $2=="glibc"' "$SEL_TEST/libc-selection.tsv" | grep -q . \
+        && grep -qx small "$SEL_TEST/dietlibc-packages.list" \
+        && grep -qx big "$SEL_TEST/glibc-packages.list"; then
+    pass "libc selection applies the smaller-artifact rule"
+else
+    fail "libc selection applies the smaller-artifact rule"
+fi
+rm -rf "$SEL_TEST"
+
+rm -rf "$SIZE_TEST"
+
+# ---------------------------------------------------------------------------
+# localrepo generation
+# ---------------------------------------------------------------------------
+LR_TEST=$(mktemp -d)
+if python3 tools/make_localrepo.py bash zlib dbus \
+        --out "$LR_TEST/localrepo" --no-timestamp >"$LR_TEST/generate.log" 2>&1; then
+    pass "localrepo is generated from package names"
+else
+    fail "localrepo is generated from package names"
+    sed -n '1,10p' "$LR_TEST/generate.log"
+fi
+
+check "localrepo has the documented column header" \
+    grep -qF $'name\tversion\trelease\tlibc\tsource_url\tsource_file\tsize\tsha256\tsignature\tsignature_url' \
+    "$LR_TEST/localrepo"
+check "localrepo contains the requested packages only" \
+    bash -c "grep -qP '^bash\t' '$LR_TEST/localrepo' \
+        && grep -qP '^zlib\t' '$LR_TEST/localrepo' \
+        && ! grep -qP '^firefox\t' '$LR_TEST/localrepo'"
+check "localrepo rows carry a SHA-256 signature" \
+    awk -F'\t' '$1=="bash" && $8 ~ /^[0-9a-f]{64}$/ && $9 == "sha256:" $8 {ok=1} END {exit !ok}' \
+    "$LR_TEST/localrepo"
+check "localrepo picks the libc selection per package" \
+    bash -c "printf 'package\tlibc\nzlib\tdietlibc\n' > '$LR_TEST/libc.tsv' \
+        && python3 tools/make_localrepo.py zlib --libc-table '$LR_TEST/libc.tsv' \
+            --out '$LR_TEST/libc-localrepo' --no-timestamp >/dev/null 2>&1 \
+        && grep -qP '^zlib\t1\.3\.1\t1\tdietlibc\t' '$LR_TEST/libc-localrepo'"
+check "localrepo checksum verifies" \
+    bash -c "cd '$LR_TEST' && sha256sum -c localrepo.sha256 >/dev/null"
+check "localrepo excludes fixture spells" \
+    bash -c "! grep -qP '^(template|test_a|test_b)\t' '$LR_TEST/localrepo'"
+
+if python3 tools/make_localrepo.py --profile base \
+        --out "$LR_TEST/base-localrepo" --no-timestamp >/dev/null 2>&1 \
+        && grep -qP '^bash\t' "$LR_TEST/base-localrepo" \
+        && ! grep -qP '^firefox\t' "$LR_TEST/base-localrepo"; then
+    pass "localrepo --profile base selects the base package set"
+else
+    fail "localrepo --profile base selects the base package set"
+fi
+
+check "localrepo rejects unknown package names" \
+    bash -c "! python3 tools/make_localrepo.py does-not-exist \
+        --out '$LR_TEST/unknown' >/dev/null 2>&1"
+check "localrepo rejects fixture package names" \
+    bash -c "! python3 tools/make_localrepo.py template \
+        --out '$LR_TEST/fixture' >/dev/null 2>&1"
+rm -rf "$LR_TEST"
 
 # ---------------------------------------------------------------------------
 # Summary

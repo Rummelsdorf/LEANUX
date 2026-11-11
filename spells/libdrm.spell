@@ -16,6 +16,11 @@ USE_DIETCOMPAT=1
 
 build() {
     log "Configuring ${PACKAGE_NAME} with $CC (meson)"
+    # dietlibc has no open_memstream().  libdrm only uses it to format two
+    # vendor-specific modifier names, so fall back to the static tables.
+    if [ "${LIBC:-dietlibc}" = dietlibc ]; then
+        export CFLAGS="${CFLAGS:-} -Dopen_memstream(a,b)=NULL"
+    fi
     meson setup build \
         --prefix=/usr \
         --libdir=lib \

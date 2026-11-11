@@ -21,10 +21,10 @@ build() {
         --libdir=lib \
         --buildtype=release \
         --default-library=static \
-        -Dbash-completion=false \
+        -Dbash_completion=false \
         -Dman=false \
-        -Dgtk-doc=false \
-        -Dtests=false \
+        -Dgtk_doc=false \
+        -Dvapi=false \
         || { cat build/meson-logs/meson-log.txt 2>/dev/null; return 1; }
     ninja -C build
     DESTDIR="$DESTDIR" meson install -C build

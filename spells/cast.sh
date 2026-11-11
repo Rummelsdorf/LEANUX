@@ -12,6 +12,7 @@
 #   ./cast.sh --dry-run <spell> [spell ...]   print the resolved build plan
 #   ./cast.sh --world                          build every spell in build/world.order
 #   ./cast.sh --dry-run --world                print the full world build plan
+#   ./cast.sh --libc glibc <spell> [spell ...] build with the system libc
 #
 # Environment:
 #   SPELL_DIR      directory containing *.spell files (default: this dir)
@@ -20,6 +21,8 @@
 #   BUILD_ROOT     per-package build trees (default: ~/LEANUX/build-output)
 #   DIET_PREFIX    dietlibc installation (default: ~/LEANUX/tools/diet)
 #   DIETGCC        dietlibc compiler wrapper (default: $DIET_PREFIX/bin/dietgcc)
+#   HOSTCC         compiler for --libc glibc (default: gcc)
+#   LIBC           dietlibc (default) or glibc
 #   JOBS           parallel make jobs (default: nproc)
 
 set -euo pipefail
@@ -31,6 +34,9 @@ SOURCES_DIR="${SOURCES_DIR:-$LEANUX_ROOT/sources}"
 BUILD_ROOT="${BUILD_ROOT:-$LEANUX_ROOT/build-output}"
 DIET_PREFIX="${DIET_PREFIX:-$LEANUX_ROOT/tools/diet}"
 DIETGCC="${DIETGCC:-$DIET_PREFIX/bin/dietgcc}"
+HOSTCC="${HOSTCC:-gcc}"
+LIBC="${LIBC:-dietlibc}"
+export LIBC
 JOBS="${JOBS:-$(nproc 2>/dev/null || echo 2)}"
 
 # ---------------------------------------------------------------------------
@@ -152,7 +158,7 @@ extract_source() {
 spell_meta() {
     local spell="$1"
     # Only read the simple metadata lines; the build functions are not run here.
-    grep -E '^(PACKAGE_NAME|PACKAGE_VERSION|DEPENDENCIES|EXTERNAL_DEPENDENCIES|FALLBACK_ALLOWED|LANGUAGE|SOURCE_URL|SOURCE_HASH|USE_DIETCOMPAT)=' "$spell" || true
+    grep -E '^(PACKAGE_NAME|PACKAGE_VERSION|DEPENDENCIES|EXTERNAL_DEPENDENCIES|FALLBACK_ALLOWED|LANGUAGE|SOURCE_URL|SOURCE_HASH|USE_DIETCOMPAT|STATIC_BUILD)=' "$spell" || true
 }
 
 is_built() {
@@ -191,7 +197,7 @@ resolve_deps() {
     # dependency on the dietcompat spell. This mirrors CLEANUX, where the shim
     # was linked into every package.
     local deps="${DEPENDENCIES[*]:-}"
-    if [ "${USE_DIETCOMPAT:-0}" = "1" ]; then
+    if [ "${USE_DIETCOMPAT:-0}" = "1" ] && [ "$LIBC" = "dietlibc" ]; then
         deps="$deps dietcompat"
     fi
     GRAPH[$pkg]="$deps"
@@ -316,7 +322,10 @@ build_package() {
         return 0
     fi
 
-    log "=== Building $pkg (dietlibc) ==="
+    local toolchain="$DIETGCC"
+    [ "$LIBC" = "glibc" ] && toolchain="$HOSTCC"
+
+    log "=== Building $pkg ($LIBC) ==="
     # Start from a clean stage so a previous failed build cannot leak files
     # (or pkg-config files) into this one.
     rm -rf "$stage"
@@ -354,7 +363,12 @@ build_package() {
         export DESTDIR="$stage"
         export STAGING_DIR="$stage"
         export DIETHOME="$DIET_PREFIX"
-        export PATH="$DIET_PREFIX/bin:$LEANUX_ROOT/tools/host/bin:$PATH"
+        if [ "$LIBC" = "dietlibc" ]; then
+            export PATH="$DIET_PREFIX/bin:$LEANUX_ROOT/tools/host/bin:$PATH"
+        else
+            export PATH="$LEANUX_ROOT/tools/host/bin:$PATH"
+            unset DIETHOME
+        fi
         export MAKEFLAGS="-j$JOBS"
 
         # Build the dependency search paths once. Every dep is installed into
@@ -388,6 +402,14 @@ build_package() {
         local base_cflags="${CFLAGS:--O2 -static -march=x86-64}"
         local base_cppflags="${CPPFLAGS:-}"
         local base_ldflags="${LDFLAGS:--static}"
+
+        # Packages with loadable plugins (CPython extension modules) cannot be
+        # linked with -static.  A spell can set STATIC_BUILD=0 to opt out; the
+        # glibc runtime is copied into the image later.
+        if [ "${STATIC_BUILD:-1}" = "0" ]; then
+            [ -n "${CFLAGS:-}" ] || base_cflags="-O2 -march=x86-64"
+            [ -n "${LDFLAGS:-}" ] || base_ldflags=""
+        fi
 
         build_with() {
             local cc="$1"
@@ -426,13 +448,14 @@ build_package() {
         }
 
         set +e
-        run_build "$DIETGCC"
+        run_build "$toolchain"
         local build_rc=$?
         set -e
         if [ "$build_rc" -eq 0 ]; then
-            log "$pkg built with dietlibc"
+            log "$pkg built with $LIBC"
+            printf '%s\n' "$LIBC" > "$stage/.libc"
         else
-            if [ "${FALLBACK_ALLOWED:-0}" = "1" ]; then
+            if [ "$LIBC" = "dietlibc" ] && [ "${FALLBACK_ALLOWED:-0}" = "1" ]; then
                 warn "$pkg failed with dietlibc – retrying with standard libc (allowed by spell)"
                 rm -rf "$builddir/src"
                 if [ -n "$SOURCE_URL" ]; then
@@ -447,8 +470,9 @@ build_package() {
                 set -e
                 [ "$fallback_rc" -eq 0 ] || die "$pkg failed with standard libc fallback"
                 log "$pkg built with standard libc fallback"
+                printf 'glibc-fallback\n' > "$stage/.libc"
             else
-                die "$pkg failed with dietlibc and FALLBACK_ALLOWED is not set"
+                die "$pkg failed with $LIBC and FALLBACK_ALLOWED is not set"
             fi
         fi
 
@@ -486,6 +510,11 @@ main() {
                 world=1
                 shift
                 ;;
+            --libc)
+                [ $# -ge 2 ] || die "--libc needs a value (dietlibc or glibc)"
+                LIBC="$2"
+                shift 2
+                ;;
             --help|-h)
                 sed -n '2,24p' "$0"
                 exit 0
@@ -514,6 +543,11 @@ main() {
 
     [ ${#packages[@]} -gt 0 ] || die "Usage: $0 <spell> [spell ...]"
 
+    case "$LIBC" in
+        dietlibc|glibc) ;;
+        *) die "Unsupported libc: $LIBC (expected dietlibc or glibc)" ;;
+    esac
+
     # Resolve the full dependency graph before touching the build host.
     local pkg
     for pkg in "${packages[@]}"; do
@@ -530,7 +564,7 @@ main() {
         exit 0
     fi
 
-    ensure_dietlibc
+    [ "$LIBC" = "dietlibc" ] && ensure_dietlibc
     mkdir -p "$STAGING_DIR" "$SOURCES_DIR" "$BUILD_ROOT"
 
     if [ "$force" = "1" ]; then

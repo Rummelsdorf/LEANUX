@@ -65,11 +65,12 @@ DEPS: dict[str, list[str]] = {
     # X11
     "libpthread-stubs": [],
     "xorgproto": [],
+    "xtrans": [],
     "libXau": ["xorgproto"],
     "libXdmcp": ["xorgproto"],
     "xcb-proto": [],
     "libxcb": ["xorgproto", "xcb-proto", "libXau", "libXdmcp", "libpthread-stubs"],
-    "libX11": ["xorgproto", "libxcb", "libXau", "libXdmcp"],
+    "libX11": ["xorgproto", "libxcb", "libXau", "libXdmcp", "xtrans"],
     "libXext": ["xorgproto", "libX11"],
     "libXrender": ["xorgproto", "libX11"],
     "libXfixes": ["xorgproto", "libX11"],
@@ -77,7 +78,7 @@ DEPS: dict[str, list[str]] = {
     "libXi": ["xorgproto", "libX11", "libXext", "libXfixes"],
     "libXtst": ["xorgproto", "libX11", "libXext", "libXi"],
     "libfontenc": ["xorgproto", "zlib"],
-    "libXfont2": ["xorgproto", "libfontenc", "freetype", "zlib"],
+    "libXfont2": ["xorgproto", "xtrans", "libfontenc", "freetype", "zlib"],
     "libxkbfile": ["xorgproto", "libX11"],
     "libdrm": [],
     "mesa": [
@@ -87,7 +88,7 @@ DEPS: dict[str, list[str]] = {
     "xkbcomp": ["xorgproto", "libX11", "libxcb", "libxkbfile"],
     "xkeyboard-config": ["xorgproto"],
     "xorg-server": [
-        "xorgproto", "libXau", "libXdmcp", "libxcb",
+        "xorgproto", "xtrans", "libXau", "libXdmcp", "libxcb",
         "libX11", "libXext", "libXrender", "libXfixes", "libXrandr",
         "libXi", "libXtst", "libXfont2", "libxkbfile",
         "libdrm", "mesa", "pixman", "fontconfig", "freetype", "dbus",
@@ -186,8 +187,13 @@ EXTRA_META = {
     },
     "libxklavier": {
         "version": "5.4",
-        "url": "https://people.freedesktop.org/~svu/libxklavier-5.4.tar.xz",
+        "url": "https://people.freedesktop.org/~svu/libxklavier-5.4.tar.bz2",
         "desc": "libxklavier – X keyboard configuration library (added port dependency of libmatekbd)",
+    },
+    "xtrans": {
+        "version": "1.6.0",
+        "url": "https://www.x.org/releases/individual/lib/xtrans-1.6.0.tar.xz",
+        "desc": "xtrans – X transport headers and pkg-config metadata (added port dependency of libX11)",
     },
     "dietcompat": {
         "version": "1",
@@ -260,7 +266,7 @@ SPEC: dict[str, dict] = {
             "-Dfontconfig=enabled", "-Dfreetype=enabled",
         ],
     },
-    "atk": {"kind": "meson", "args": ["-Dintrospection=disabled", "-Ddocs=false"]},
+    "atk": {"kind": "meson", "args": ["-Dintrospection=false", "-Ddocs=false"]},
     "gdk-pixbuf": {
         "kind": "meson",
         "args": [
@@ -278,10 +284,10 @@ SPEC: dict[str, dict] = {
         ],
         "extern": ["gettext", "itstool"],
     },
-    "gsettings-desktop-schemas": {"kind": "meson", "args": [], "compat": False},
+    "gsettings-desktop-schemas": {"kind": "meson", "args": ["-Dintrospection=false"], "compat": False},
     "dconf": {
         "kind": "meson",
-        "args": ["-Dbash-completion=false", "-Dman=false", "-Dgtk-doc=false", "-Dtests=false"],
+        "args": ["-Dbash_completion=false", "-Dman=false", "-Dgtk_doc=false", "-Dvapi=false"],
     },
     "libpthread-stubs": {"kind": "autotools_data", "compat": False},
     "libXau": {"kind": "autotools"},
@@ -289,10 +295,10 @@ SPEC: dict[str, dict] = {
     "xcb-proto": {"kind": "autotools_data", "compat": False},
     "libxcb": {"kind": "autotools", "args": ["--disable-devel-docs", "--without-doxygen"]},
     "xorgproto": {"kind": "autotools_data", "compat": False},
+    "xtrans": {"kind": "autotools_data", "compat": False},
     "libX11": {
         "kind": "autotools",
         "args": ["--disable-specs", "--disable-devel-docs"],
-        "extern": ["xtrans"],
     },
     "libXext": {"kind": "autotools"},
     "libXrender": {"kind": "autotools"},
@@ -317,7 +323,11 @@ SPEC: dict[str, dict] = {
         "extern": ["python3", "mako", "pyyaml"],
     },
     "xkbcomp": {"kind": "autotools_exe"},
-    "xkeyboard-config": {"kind": "autotools_data", "compat": False},
+    "xkeyboard-config": {
+        "kind": "meson",
+        "args": ["-Dxkb-base=/usr/share/X11/xkb"],
+        "compat": False,
+    },
     "xorg-server": {
         "kind": "autotools_exe",
         "args": [
@@ -327,7 +337,7 @@ SPEC: dict[str, dict] = {
             "--disable-xwin", "--disable-dmx",
         ],
         "extern": [
-            "xtrans", "libXcomposite", "libXdamage", "libXcursor",
+            "libXcomposite", "libXdamage", "libXcursor",
             "libXinerama", "libXmu", "libXpm", "libpciaccess",
         ],
     },

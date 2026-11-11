@@ -22,7 +22,7 @@ build() {
         --disable-shared \
         --enable-static \
         CC="$CC" \
-        CFLAGS="${CFLAGS:-}" \
+        CFLAGS="${CFLAGS:-} -Dindex=index -Drindex=rindex" \
         LDFLAGS="${LDFLAGS:-}"
     make -j"${JOBS:-$(nproc)}"
     make DESTDIR="$DESTDIR" install

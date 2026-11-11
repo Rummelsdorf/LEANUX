@@ -4,7 +4,7 @@ PACKAGE_NAME="libXfont2"
 PACKAGE_VERSION="2.0.6"
 PACKAGE_RELEASE="1"
 
-DEPENDENCIES=("xorgproto" "libfontenc" "freetype" "zlib")
+DEPENDENCIES=("xorgproto" "xtrans" "libfontenc" "freetype" "zlib")
 EXTERNAL_DEPENDENCIES=()
 SOURCE_URL="https://www.x.org/releases/individual/lib/libXfont2-2.0.6.tar.xz"
 SOURCE_HASH="PLACEHOLDER_HASH"

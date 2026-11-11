@@ -1,27 +1,28 @@
-# xkeyboard-config (dependency for xorg-server)
-# Ported from CLEANUX (2026-11-08).
+# xkeyboard-config (dependency for xorg-server, MATE and VLC)
+# Ported from CLEANUX (2026-11-08).  Upstream switched to Meson in 2.35,
+# so this package has no autotools configure script.
 PACKAGE_NAME="xkeyboard-config"
 PACKAGE_VERSION="2.43"
 PACKAGE_RELEASE="1"
 
 DEPENDENCIES=("xorgproto")
 EXTERNAL_DEPENDENCIES=()
-SOURCE_URL="https://www.x.org/releases/individual/data/xkeyboard-config-2.43.tar.xz"
+SOURCE_URL="https://www.x.org/releases/individual/data/xkeyboard-config/xkeyboard-config-2.43.tar.xz"
 SOURCE_HASH="PLACEHOLDER_HASH"
 
-BUILD_STYLE="configure"
+BUILD_STYLE="meson"
 LANGUAGE="c"
 FALLBACK_ALLOWED=0
 USE_DIETCOMPAT=0
 
 build() {
-    log "Configuring ${PACKAGE_NAME} with $CC"
-    ./configure \
+    log "Configuring ${PACKAGE_NAME} with $CC (meson)"
+    meson setup build \
         --prefix=/usr \
-        --build="$(gcc -dumpmachine)" \
-        CC="$CC" \
-        CFLAGS="${CFLAGS:-}" \
-        LDFLAGS="${LDFLAGS:-}"
-    make -j"${JOBS:-$(nproc)}"
-    make DESTDIR="$DESTDIR" install
+        --libdir=lib \
+        --buildtype=release \
+        -Dxkb-base=/usr/share/X11/xkb \
+        || { cat build/meson-logs/meson-log.txt 2>/dev/null; return 1; }
+    ninja -C build
+    DESTDIR="$DESTDIR" meson install -C build
 }

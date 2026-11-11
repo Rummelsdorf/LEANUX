@@ -20,8 +20,9 @@ build() {
         --prefix=/usr \
         --build="$(gcc -dumpmachine)" \
         CC="$CC" \
-        CFLAGS="${CFLAGS:-}" \
+        CFLAGS="${CFLAGS:-} -Dindex=index -Drindex=rindex" \
         LDFLAGS="${LDFLAGS:-}"
-    make -j"${JOBS:-$(nproc)}"
+    make -j"${JOBS:-$(nproc)}" \
+        XKBCOMP_LIBS="-Wl,--start-group $(pkg-config --static --libs xkbfile x11) -Wl,--end-group"
     make DESTDIR="$DESTDIR" install
 }

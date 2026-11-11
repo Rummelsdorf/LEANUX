@@ -16,15 +16,28 @@ USE_DIETCOMPAT=1
 
 build() {
     log "Configuring ${PACKAGE_NAME} with $CC"
+    local tor_cflags="${CFLAGS:-}"
+    [ "${LIBC:-dietlibc}" = dietlibc ] && \
+        tor_cflags="$tor_cflags -DPTHREAD_MUTEX_RECURSIVE=PTHREAD_MUTEX_RECURSIVE_NP"
     ./configure \
         --prefix=/usr \
         --build="$(gcc -dumpmachine)" \
         --disable-asciidoc \
         --disable-systemd \
         --disable-seccomp \
+        --disable-unittests \
+        --disable-gcc-hardening \
+        --disable-linker-hardening \
         CC="$CC" \
-        CFLAGS="${CFLAGS:-}" \
+        CFLAGS="$tor_cflags" \
         LDFLAGS="${LDFLAGS:-}"
-    make -j"${JOBS:-$(nproc)}"
+    # dietlibc advertises GLOB_ALTDIRFUNC but its glob_t has no gl_* function
+    # pointers.  Disable that optional path (tor only uses it for sandboxing).
+    sed -i 's/#ifdef GLOB_ALTDIRFUNC/#if 0/' src/lib/fs/path.c
+    # libtool/automake put LIBS after the archives, so repeat the compat
+    # library there to satisfy symbols in libtor-* (dietlibc builds only).
+    local libs="-lpthread -lm"
+    [ "${LIBC:-dietlibc}" = dietlibc ] && libs="-lpthread -ldietcompat -lm"
+    make -j"${JOBS:-$(nproc)}" LIBS="$libs"
     make DESTDIR="$DESTDIR" install
 }

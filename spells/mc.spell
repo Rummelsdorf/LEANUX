@@ -6,7 +6,7 @@ PACKAGE_RELEASE="1"
 
 DEPENDENCIES=("ncurses" "glib")
 EXTERNAL_DEPENDENCIES=("libssh2")
-SOURCE_URL="https://ftp.midnight-commander.org/mc-4.8.32.tar.xz"
+SOURCE_URL="https://ftp.osuosl.org/pub/midnightcommander/mc-4.8.32.tar.xz"
 SOURCE_HASH="PLACEHOLDER_HASH"
 
 BUILD_STYLE="configure"
@@ -22,6 +22,7 @@ build() {
         --disable-shared \
         --enable-static \
         --without-x \
+        --with-screen=ncurses \
         --disable-doxygen \
         --disable-nls \
         CC="$CC" \

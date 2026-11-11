@@ -34,6 +34,7 @@ freetype
 atk
 gdk-pixbuf
 gsettings-desktop-schemas
+xtrans
 libX11
 mate-menus
 openssh
