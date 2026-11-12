@@ -374,6 +374,80 @@ cat > "$ROOTFS/etc/issue" <<EOF
 LEANUX ${VERSION} – Erstausgabe
 EOF
 
+# HTTPS (ollama pull, wget) needs a CA bundle.  Go's crypto/x509 reads
+# /etc/ssl/certs/ca-certificates.crt; the pki paths are compatibility links.
+mkdir -p "$ROOTFS/etc/ssl/certs" "$ROOTFS/etc/pki/tls/certs"
+if [ -r /etc/ssl/certs/ca-certificates.crt ]; then
+    install -m644 /etc/ssl/certs/ca-certificates.crt \
+        "$ROOTFS/etc/ssl/certs/ca-certificates.crt"
+    ln -sfn /etc/ssl/certs/ca-certificates.crt "$ROOTFS/etc/pki/tls/certs/ca-bundle.crt"
+    ln -sfn /etc/ssl/certs/ca-certificates.crt "$ROOTFS/etc/ssl/cert.pem"
+else
+    warn "CA bundle not found – HTTPS downloads (ollama pull) will fail"
+fi
+
+# The squashfs root is read-only, so /etc/resolv.conf cannot be rewritten by
+# udhcpc.  Point it at /run (tmpfs); the init script creates the file there.
+ln -sfn /run/resolv.conf "$ROOTFS/etc/resolv.conf"
+cat > "$ROOTFS/etc/nsswitch.conf" <<'EOF'
+passwd: files
+group:  files
+hosts:  files dns
+EOF
+
+# udhcpc hook: address, default route and DNS.  BusyBox reports the netmask
+# either as dotted quad (subnet) or as prefix length (mask), so handle both.
+mkdir -p "$ROOTFS/etc/udhcpc"
+cat > "$ROOTFS/etc/udhcpc/default.script" <<'EOF'
+#!/bin/sh
+# LEANUX udhcpc hook
+case "$1" in
+    deconfig)
+        ifconfig "$interface" 0.0.0.0 2>/dev/null || true
+        ;;
+    bound|renew)
+        [ -n "$ip" ] || exit 0
+        netmask="${subnet:-${mask:-255.255.255.0}}"
+        case "$netmask" in
+            *.*) ifconfig "$interface" "$ip" netmask "$netmask" 2>/dev/null ;;
+            *)   ip addr flush dev "$interface" 2>/dev/null
+                 ip addr add "$ip/$netmask" dev "$interface" 2>/dev/null ;;
+        esac
+        if [ -n "$router" ]; then
+            route del default 2>/dev/null || true
+            route add default gw "$router" dev "$interface" 2>/dev/null || true
+        fi
+        : > /etc/resolv.conf
+        for ns in $dns; do
+            printf 'nameserver %s\n' "$ns" >> /etc/resolv.conf
+        done
+        [ -n "$domain" ] && printf 'search %s\n' "$domain" >> /etc/resolv.conf
+        ;;
+esac
+exit 0
+EOF
+chmod 755 "$ROOTFS/etc/udhcpc/default.script"
+
+# Manual helper: netup (or dhcp) requests a lease on every interface.
+cat > "$ROOTFS/usr/sbin/netup" <<'EOF'
+#!/bin/sh
+# Bring up all non-loopback interfaces and request a DHCP lease.
+found=0
+for entry in /sys/class/net/*; do
+    iface="${entry##*/}"
+    [ "$iface" = lo ] && continue
+    found=1
+    ip link set "$iface" up 2>/dev/null || ifconfig "$iface" up 2>/dev/null
+    printf 'DHCP auf %s ...\n' "$iface"
+    udhcpc -i "$iface" -s /etc/udhcpc/default.script -b -q
+done
+[ "$found" = 1 ] || echo "Keine Netzwerkschnittstelle gefunden."
+sleep 2
+ip -4 addr show 2>/dev/null || ifconfig -a 2>/dev/null
+EOF
+chmod 755 "$ROOTFS/usr/sbin/netup"
+ln -sfn netup "$ROOTFS/usr/sbin/dhcp"
+
 cat > "$ROOTFS/init" <<EOF
 #!/bin/sh
 # LEANUX first-stage init for a plain root filesystem.
@@ -381,9 +455,53 @@ export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 mount -t proc proc /proc 2>/dev/null || true
 mount -t sysfs sysfs /sys 2>/dev/null || true
 mount -t devtmpfs devtmpfs /dev 2>/dev/null || mount -t tmpfs tmpfs /dev 2>/dev/null || true
-mkdir -p /run /tmp /var/tmp /var/log
+# The squashfs root is read-only; runtime state and Ollama models need a
+# writable place.  Models therefore live in RAM until a disk is mounted.
+for dir in /run /tmp /var/tmp /var/log /root; do
+    mkdir -p "\$dir"
+    mount -t tmpfs -o mode=0755 tmpfs "\$dir" 2>/dev/null || true
+done
 chmod 1777 /tmp /var/tmp 2>/dev/null || true
+chmod 700 /root 2>/dev/null || true
+# /etc/resolv.conf is a symlink to this file (the root filesystem is read-only).
+: > /run/resolv.conf
+chmod 644 /run/resolv.conf 2>/dev/null || true
+
+# Load the network drivers shipped in /lib/modules (dependency order).
+# Keep the console readable while dozens of drivers register; the messages
+# remain available through dmesg.
+dmesg -n 1 2>/dev/null || true
+if [ -f /etc/modules.network ]; then
+    while IFS= read -r module; do
+        [ -n "\$module" ] || continue
+        # hv_netvsc only works on Hyper-V; hv_vmbus fails to load elsewhere.
+        case "\$module" in
+            */hv_netvsc.ko)
+                grep -q '^hv_vmbus ' /proc/modules 2>/dev/null || continue ;;
+        esac
+        insmod "\$module" 2>/dev/null
+    done < /etc/modules.network
+fi
+dmesg -n 4 2>/dev/null || true
+ip link set lo up 2>/dev/null || ifconfig lo up 2>/dev/null || true
+
+# Request a DHCP lease on every interface in the background.
+for entry in /sys/class/net/*; do
+    iface="\${entry##*/}"
+    [ "\$iface" = lo ] && continue
+    ip link set "\$iface" up 2>/dev/null || true
+    udhcpc -i "\$iface" -s /etc/udhcpc/default.script -b -q >/dev/null 2>&1
+done
+
+# Start the Ollama server so that "ollama pull" works immediately.
+if [ -x /usr/bin/ollama ]; then
+    HOME=/root /usr/bin/ollama serve >/var/log/ollama.log 2>&1 &
+fi
+
 printf '\nLEANUX ${VERSION} - Erstausgabe\n\n'
+printf 'Netzwerk: DHCP laeuft im Hintergrund; Status mit "ip addr" oder "netup".\n'
+printf 'Ollama:   Server laeuft; Modelle mit "ollama pull <modell>".\n'
+printf 'Hinweis:  Modelle liegen in /root/.ollama im RAM (tmpfs).\n\n'
 # PID 1 must never exit: the kernel panics with "Attempted to kill init" when
 # it does.  Respawn the shell instead of exec'ing it.
 while :; do
@@ -431,6 +549,45 @@ python3 tools/collect_runtime_deps.py \
     || warn "runtime dependency scan failed"
 
 # ---------------------------------------------------------------------------
+# kernel modules and network support for the live system
+# ---------------------------------------------------------------------------
+find_kernel() {
+    local candidate
+    if [ -n "$KERNEL" ]; then
+        [ -r "$KERNEL" ] || die "kernel not readable: $KERNEL"
+        printf '%s\n' "$KERNEL"
+        return 0
+    fi
+    for candidate in $(ls -1 /boot/vmlinuz-* 2>/dev/null | sort -rV); do
+        if [ -r "$candidate" ]; then
+            printf '%s\n' "$candidate"
+            return 0
+        fi
+    done
+    return 1
+}
+
+KERNEL_FILE=""
+KERNEL_VERSION=""
+if KERNEL_FILE="$(find_kernel)"; then
+    KERNEL_FILE="$(readlink -f "$KERNEL_FILE")"
+    KERNEL_VERSION="$(file -b "$KERNEL_FILE" | sed -n 's/.*version \([^ ]*\).*/\1/p')"
+    [ -n "$KERNEL_VERSION" ] || \
+        KERNEL_VERSION="$(basename "$KERNEL_FILE" | sed 's/^vmlinuz-//')"
+    if [ -d "/lib/modules/$KERNEL_VERSION" ]; then
+        log "sammle Netzwerktreiber und Firmware für ${KERNEL_VERSION}"
+        "$ROOT/tools/collect_network_support.sh" \
+            --kernel-version "$KERNEL_VERSION" --rootfs "$ROOTFS" \
+            || die "network support collection failed"
+    else
+        warn "kein Modulbaum für Kernel ${KERNEL_VERSION} – Image ohne Netzwerktreiber"
+    fi
+else
+    [ "$IMAGE" = "img" ] || die "no readable kernel found; pass --kernel FILE"
+    warn "kein Kernel gefunden – Image ohne Netzwerktreiber"
+fi
+
+# ---------------------------------------------------------------------------
 # size and image
 # ---------------------------------------------------------------------------
 ROOTFS_BYTES=$(du -sb "$ROOTFS" | cut -f1)
@@ -460,28 +617,12 @@ create_img() {
     CREATED_IMAGES+=("$IMG_FILE")
 }
 
-find_kernel() {
-    local candidate
-    if [ -n "$KERNEL" ]; then
-        [ -r "$KERNEL" ] || die "kernel not readable: $KERNEL"
-        printf '%s\n' "$KERNEL"
-        return 0
-    fi
-    for candidate in $(ls -1 /boot/vmlinuz-* 2>/dev/null | sort -rV); do
-        if [ -r "$candidate" ]; then
-            printf '%s\n' "$candidate"
-            return 0
-        fi
-    done
-    return 1
-}
-
 create_iso() {
     command -v mksquashfs >/dev/null 2>&1 || die "mksquashfs not found"
     command -v grub-mkrescue >/dev/null 2>&1 || die "grub-mkrescue not found"
     command -v cpio >/dev/null 2>&1 || die "cpio not found"
-    local kernel isodir initrd
-    kernel="$(find_kernel)" || die "no readable kernel found; pass --kernel FILE"
+    local isodir initrd
+    [ -n "$KERNEL_FILE" ] || die "no readable kernel found; pass --kernel FILE"
     isodir="$OUT/iso-root"
     initrd="$OUT/initramfs-root"
     rm -rf "$isodir" "$initrd"
@@ -495,19 +636,14 @@ create_iso() {
     install -m755 /usr/bin/busybox "$initrd/bin/busybox"
 
     # The kernel release must match the module tree, otherwise the initramfs
-    # cannot load isofs/AHCI/USB drivers.  Prefer the version embedded in the
-    # image and fall back to the file name.
-    local kernel_version
-    kernel_version="$(file -b "$kernel" | sed -n 's/.*version \([^ ]*\).*/\1/p')"
-    if [ -z "$kernel_version" ]; then
-        kernel_version="$(basename "$kernel" | sed 's/^vmlinuz-//')"
-    fi
-    [ -d "/lib/modules/${kernel_version}" ] || \
-        die "no module tree for kernel ${kernel_version}; pass a matching --kernel"
+    # cannot load isofs/AHCI/USB drivers.  KERNEL_VERSION was resolved before
+    # the rootfs was packed, so the image and the initramfs agree.
+    [ -d "/lib/modules/${KERNEL_VERSION}" ] || \
+        die "no module tree for kernel ${KERNEL_VERSION}; pass a matching --kernel"
 
-    log "sammle Kernelmodule für ${kernel_version}"
+    log "sammle Kernelmodule für ${KERNEL_VERSION}"
     "$ROOT/tools/collect_kernel_modules.sh" \
-        --kernel-version "$kernel_version" --dest "$initrd" \
+        --kernel-version "$KERNEL_VERSION" --dest "$initrd" \
         || die "kernel module collection failed"
 
     cat > "$initrd/init" <<'EOF'
@@ -586,7 +722,7 @@ EOF
     (cd "$initrd" && find . -print0 | cpio --null -o --format=newc 2>/dev/null \
         | gzip -9 > "$isodir/boot/initramfs.img") || die "initramfs creation failed"
 
-    cp "$kernel" "$isodir/boot/vmlinuz"
+    cp "$KERNEL_FILE" "$isodir/boot/vmlinuz"
     # console=tty0 is the only console in the default entry.  A trailing
     # console=ttyS0 would make /dev/console unusable on machines without a
     # serial port (VirtualBox, most laptops); PID 1 then exits and the kernel
@@ -607,7 +743,7 @@ menuentry "LEANUX ${VERSION} (Erstausgabe, serielle Konsole)" {
 EOF
     cat > "$isodir/LEANUX/README.txt" <<EOF
 LEANUX ${VERSION} – Erstausgabe
-Kernel: $(basename "$kernel")
+Kernel: $(basename "$KERNEL_FILE")
 Rootfs: squashfs (LEANUX/rootfs.squashfs)
 Profil: ${PROFILE}
 EOF

@@ -231,6 +231,37 @@ second entry adds `console=ttyS0,115200n8` for serial consoles.  Do not make
 becomes unusable and PID 1 exits, which the kernel reports as
 `Kernel panic - not syncing: Attempted to kill init`.
 
+### Network in the live system
+
+`tools/collect_network_support.sh` adds a curated set of common wired network
+drivers and their firmware to the rootfs: VirtIO, VMXNET3, Hyper-V, Intel
+(e1000/e1000e/igb/igc/ixgbe/i40e/ice), Realtek (r8169, 8139), Broadcom
+(tg3/bnx2), Marvell, many older PCI adapters and USB Ethernet.  Wireless is not
+included (it needs `wpa_supplicant` and per-device firmware).  The module list
+is written to `/etc/modules.network` and loaded by `/init` in dependency order.
+
+At boot the init script brings up every interface and requests a DHCP lease
+with BusyBox `udhcpc`; the hook in `/etc/udhcpc/default.script` sets the
+address, default route and DNS servers.  Because the squashfs root is
+read-only, `/etc/resolv.conf` is a symlink to `/run/resolv.conf` on tmpfs.
+`netup` (also available as `dhcp`) repeats the DHCP request manually and shows
+the result.
+
+The CA bundle at `/etc/ssl/certs/ca-certificates.crt` is required for HTTPS.
+`ollama serve` is started in the background at boot, so models can be pulled
+directly:
+
+```sh
+ip addr              # check the DHCP lease
+netup                # retry DHCP on all interfaces
+ollama pull all-minilm
+ollama run all-minilm "Hello"
+```
+
+Models are stored in `/root/.ollama`, which is a tmpfs in the first edition:
+they live in RAM and are gone after a reboot.  Mount a writable disk and point
+`OLLAMA_MODELS` at it for persistence.
+
 ## Directory layout
 
 ```

@@ -29,10 +29,24 @@ check "compile-all.sh syntax" bash -n tests/compile-all.sh
 check "compare-libc.sh syntax" bash -n tests/compare-libc.sh
 check "build-release.sh syntax" bash -n tests/build-release.sh
 check "collect_kernel_modules.sh syntax" bash -n tools/collect_kernel_modules.sh
+check "collect_network_support.sh syntax" bash -n tools/collect_network_support.sh
 check "kernel module collection finds isofs" bash -c \
     'tools/collect_kernel_modules.sh --kernel-version "$(uname -r)" --list | grep -q "/isofs.ko"'
 check "kernel module collection rejects unknown kernels" bash -c \
     '! tools/collect_kernel_modules.sh --kernel-version 0.0.0-does-not-exist --list >/dev/null 2>&1'
+check "network collection finds e1000" bash -c \
+    'tools/collect_network_support.sh --kernel-version "$(uname -r)" --list | grep -q "/e1000.ko"'
+check "network collection rejects unknown kernels" bash -c \
+    '! tools/collect_network_support.sh --kernel-version 0.0.0-does-not-exist --list >/dev/null 2>&1'
+# The live rootfs is a read-only squashfs: resolv.conf must live on tmpfs,
+# otherwise udhcpc cannot write the DNS servers and `ollama pull` fails.
+check "rootfs resolv.conf points at writable /run" \
+    grep -q 'ln -sfn /run/resolv.conf' tests/build-release.sh
+check "rootfs ships a CA bundle for HTTPS" \
+    grep -q 'ca-certificates.crt' tests/build-release.sh
+check "rootfs ships the udhcpc hook and netup helper" bash -c \
+    'grep -q "etc/udhcpc/default.script" tests/build-release.sh && grep -q "usr/sbin/netup" tests/build-release.sh'
+
 # Regression: a trailing console=ttyS0 made /dev/console unusable on machines
 # without a serial port and panicked the kernel ("Attempted to kill init").
 # The first (default) GRUB entry must use tty0 only.
