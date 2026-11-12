@@ -16,7 +16,7 @@ spell explicitly allows a fallback (`FALLBACK_ALLOWED=1`).
 | CLEANUX package port | **spells and graph imported** – 73-package world order; see `PORTING.md` |
 | xz, libpng, pixman built with dietlibc | **verified** |
 | Full desktop/AI package set | **in progress** – 53 ported spells still need their archives pinned |
-| Live ISO | **not built yet** – only after the package set compiles |
+| Live ISO | **built** – minimal image (zlib, Ollama, OpenCode); full desktop stack still pending |
 
 The project does **not** yet build the full MATE/Firefox/VLC/Python/llama.cpp
 stack. The spell definitions and dependency graph are in place, but most of the
@@ -221,6 +221,15 @@ initramfs), `out/RELEASE-BERICHT.md`, `out/rootfs-manifest.tsv` and
 `out/runtime-deps.tsv`.  The ISO uses the newest readable kernel below `/boot`
 unless `--kernel FILE` is given.  The `built` profile is the default and only
 assembles packages that already have a matching stage.
+
+The ISO's initramfs is built by `tools/collect_kernel_modules.sh`, which pulls
+the storage and filesystem modules (isofs, AHCI/SATA, USB, VirtIO, NVMe) that
+match the selected kernel; without them the medium is invisible on real
+hardware.  GRUB offers two entries: the default uses `console=tty0` only, and a
+second entry adds `console=ttyS0,115200n8` for serial consoles.  Do not make
+`ttyS0` the last console on machines without a serial port: `/dev/console` then
+becomes unusable and PID 1 exits, which the kernel reports as
+`Kernel panic - not syncing: Attempted to kill init`.
 
 ## Directory layout
 

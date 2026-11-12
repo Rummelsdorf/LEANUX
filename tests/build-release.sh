@@ -374,17 +374,23 @@ cat > "$ROOTFS/etc/issue" <<EOF
 LEANUX ${VERSION} – Erstausgabe
 EOF
 
-cat > "$ROOTFS/init" <<'EOF'
+cat > "$ROOTFS/init" <<EOF
 #!/bin/sh
 # LEANUX first-stage init for a plain root filesystem.
+export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 mount -t proc proc /proc 2>/dev/null || true
 mount -t sysfs sysfs /sys 2>/dev/null || true
 mount -t devtmpfs devtmpfs /dev 2>/dev/null || mount -t tmpfs tmpfs /dev 2>/dev/null || true
 mkdir -p /run /tmp /var/tmp /var/log
 chmod 1777 /tmp /var/tmp 2>/dev/null || true
-export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
-printf '\nLEANUX %s – Erstausgabe\n\n' "0.1.0"
-exec /bin/sh
+printf '\nLEANUX ${VERSION} - Erstausgabe\n\n'
+# PID 1 must never exit: the kernel panics with "Attempted to kill init" when
+# it does.  Respawn the shell instead of exec'ing it.
+while :; do
+    /bin/sh
+    printf 'LEANUX: Shell beendet, starte neu...\n'
+    sleep 1
+done
 EOF
 chmod +x "$ROOTFS/init"
 
@@ -487,53 +493,115 @@ create_iso() {
 
     log "erstelle Initramfs"
     install -m755 /usr/bin/busybox "$initrd/bin/busybox"
-    local kernel_version module
-    kernel_version="$(basename "$kernel" | sed 's/^vmlinuz-//')"
-    module="/lib/modules/${kernel_version}/kernel/fs/isofs/isofs.ko.zst"
-    if [ -f "$module" ]; then
-        if command -v unzstd >/dev/null 2>&1; then
-            unzstd -c "$module" > "$initrd/isofs.ko"
-        else
-            cp "$module" "$initrd/isofs.ko.zst"
-        fi
-    else
-        warn "isofs module not found for kernel ${kernel_version}"
+
+    # The kernel release must match the module tree, otherwise the initramfs
+    # cannot load isofs/AHCI/USB drivers.  Prefer the version embedded in the
+    # image and fall back to the file name.
+    local kernel_version
+    kernel_version="$(file -b "$kernel" | sed -n 's/.*version \([^ ]*\).*/\1/p')"
+    if [ -z "$kernel_version" ]; then
+        kernel_version="$(basename "$kernel" | sed 's/^vmlinuz-//')"
     fi
+    [ -d "/lib/modules/${kernel_version}" ] || \
+        die "no module tree for kernel ${kernel_version}; pass a matching --kernel"
+
+    log "sammle Kernelmodule für ${kernel_version}"
+    "$ROOT/tools/collect_kernel_modules.sh" \
+        --kernel-version "$kernel_version" --dest "$initrd" \
+        || die "kernel module collection failed"
+
     cat > "$initrd/init" <<'EOF'
 #!/bin/busybox sh
+export PATH=/bin:/sbin:/usr/bin:/usr/sbin
 /bin/busybox mkdir -p /proc /sys /dev /run /mnt/cdrom /mnt/root
-/bin/busybox mount -t proc proc /proc
-/bin/busybox mount -t sysfs sysfs /sys
-/bin/busybox mount -t devtmpfs devtmpfs /dev 2>/dev/null || true
-[ -f /isofs.ko ] && /bin/busybox insmod /isofs.ko 2>/dev/null
-[ -f /isofs.ko.zst ] && /bin/busybox insmod /isofs.ko.zst 2>/dev/null
-for dev in /dev/sr0 /dev/vd* /dev/sd*; do
-    [ -b "$dev" ] || continue
-    if /bin/busybox mount -t iso9660 -o ro "$dev" /mnt/cdrom 2>/dev/null; then
-        break
-    fi
-done
-if ! /bin/busybox mount -t squashfs -o ro,loop /mnt/cdrom/LEANUX/rootfs.squashfs /mnt/root; then
-    echo "LEANUX: rootfs.squashfs not found"
-    exec /bin/busybox sh
+/bin/busybox mount -t proc proc /proc 2>/dev/null
+/bin/busybox mount -t sysfs sysfs /sys 2>/dev/null
+/bin/busybox mount -t devtmpfs devtmpfs /dev 2>/dev/null || \
+    /bin/busybox mount -t tmpfs tmpfs /dev 2>/dev/null
+
+if [ -f /modules.load ]; then
+    while IFS= read -r module; do
+        [ -n "$module" ] || continue
+        /bin/busybox insmod "$module" 2>/dev/null
+    done < /modules.load
 fi
+
+# Never let init exit: an exiting PID 1 makes the kernel panic.  Keep a rescue
+# shell alive even when the console is misconfigured or the medium is missing.
+rescue() {
+    printf '\nLEANUX: %s\n' "$*" >&2
+    printf 'LEANUX: Rettungsshell aktiv (Neustart: Strg+Alt+Entf).\n' >&2
+    while :; do
+        /bin/busybox sh
+        /bin/busybox sleep 1
+    done
+}
+
+# Wait up to 20 seconds for a CD/DVD, USB, VirtIO or NVMe device.  USB
+# enumeration is asynchronous, so a single probe is not enough.
+mounted=0
+tries=0
+while [ "$tries" -lt 20 ]; do
+    for dev in /dev/sr* /dev/sd* /dev/vd* /dev/nvme*n*; do
+        [ -b "$dev" ] || continue
+        if /bin/busybox mount -t iso9660 -o ro "$dev" /mnt/cdrom 2>/dev/null; then
+            if [ -f /mnt/cdrom/LEANUX/rootfs.squashfs ]; then
+                mounted=1
+                break
+            fi
+            /bin/busybox umount /mnt/cdrom 2>/dev/null
+        fi
+    done
+    [ "$mounted" = 1 ] && break
+    tries=$((tries + 1))
+    /bin/busybox sleep 1
+done
+[ "$mounted" = 1 ] || rescue "LEANUX-Datentraeger nicht gefunden (rootfs.squashfs)."
+
+# Prefer an explicit loop device; fall back to the mount helper.
+loopdev="$(/bin/busybox losetup -f 2>/dev/null)"
+if [ -n "$loopdev" ]; then
+    /bin/busybox losetup "$loopdev" /mnt/cdrom/LEANUX/rootfs.squashfs 2>/dev/null \
+        || loopdev=""
+fi
+if [ -n "$loopdev" ]; then
+    /bin/busybox mount -t squashfs -o ro "$loopdev" /mnt/root 2>/dev/null \
+        || rescue "squashfs konnte nicht eingebunden werden."
+else
+    /bin/busybox mount -t squashfs -o ro,loop \
+        /mnt/cdrom/LEANUX/rootfs.squashfs /mnt/root 2>/dev/null \
+        || rescue "squashfs konnte nicht eingebunden werden."
+fi
+
+[ -x /mnt/root/init ] || rescue "/mnt/root/init fehlt oder ist nicht ausführbar."
+
 /bin/busybox mkdir -p /mnt/root/proc /mnt/root/sys /mnt/root/dev /mnt/root/run
 /bin/busybox mount -o move /proc /mnt/root/proc 2>/dev/null || true
 /bin/busybox mount -o move /sys /mnt/root/sys 2>/dev/null || true
 /bin/busybox mount -o move /dev /mnt/root/dev 2>/dev/null || true
 exec /bin/busybox switch_root /mnt/root /init
+rescue "switch_root ist fehlgeschlagen."
 EOF
     chmod +x "$initrd/init"
     (cd "$initrd" && find . -print0 | cpio --null -o --format=newc 2>/dev/null \
         | gzip -9 > "$isodir/boot/initramfs.img") || die "initramfs creation failed"
 
     cp "$kernel" "$isodir/boot/vmlinuz"
+    # console=tty0 is the only console in the default entry.  A trailing
+    # console=ttyS0 would make /dev/console unusable on machines without a
+    # serial port (VirtualBox, most laptops); PID 1 then exits and the kernel
+    # panics with "Attempted to kill init".  Serial users get their own entry.
     cat > "$isodir/boot/grub/grub.cfg" <<EOF
 set default=0
-set timeout=3
+set timeout=5
 
 menuentry "LEANUX ${VERSION} (Erstausgabe)" {
-    linux /boot/vmlinuz root=/dev/ram0 rdinit=/init console=tty0 console=ttyS0 quiet
+    linux /boot/vmlinuz rdinit=/init console=tty0
+    initrd /boot/initramfs.img
+}
+
+menuentry "LEANUX ${VERSION} (Erstausgabe, serielle Konsole)" {
+    linux /boot/vmlinuz rdinit=/init console=tty0 console=ttyS0,115200n8
     initrd /boot/initramfs.img
 }
 EOF

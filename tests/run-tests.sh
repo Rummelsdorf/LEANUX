@@ -28,6 +28,16 @@ check "bootstrap/dietlibc.sh syntax" bash -n bootstrap/dietlibc.sh
 check "compile-all.sh syntax" bash -n tests/compile-all.sh
 check "compare-libc.sh syntax" bash -n tests/compare-libc.sh
 check "build-release.sh syntax" bash -n tests/build-release.sh
+check "collect_kernel_modules.sh syntax" bash -n tools/collect_kernel_modules.sh
+check "kernel module collection finds isofs" bash -c \
+    'tools/collect_kernel_modules.sh --kernel-version "$(uname -r)" --list | grep -q "/isofs.ko"'
+check "kernel module collection rejects unknown kernels" bash -c \
+    '! tools/collect_kernel_modules.sh --kernel-version 0.0.0-does-not-exist --list >/dev/null 2>&1'
+# Regression: a trailing console=ttyS0 made /dev/console unusable on machines
+# without a serial port and panicked the kernel ("Attempted to kill init").
+# The first (default) GRUB entry must use tty0 only.
+check "ISO default entry does not force console=ttyS0" bash -c \
+    '! grep -m1 "linux /boot/vmlinuz" tests/build-release.sh | grep -q "console=ttyS0"'
 check "fetch_sources.py syntax" python3 -m py_compile tools/fetch_sources.py
 check "verify_sources.py syntax" python3 -m py_compile tools/verify_sources.py
 
