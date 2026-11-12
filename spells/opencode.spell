@@ -1,0 +1,70 @@
+# OpenCode – terminal AI coding agent (upstream Bun-compiled binary)
+#
+# OpenCode is distributed as a self-contained binary produced by Bun.  Bun
+# cannot link against dietlibc, so the dietlibc pass fails early
+# (FALLBACK_ALLOWED=0 keeps that failure honest).  Upstream also publishes a
+# fully static musl build; it is fetched as well and the smaller of the two
+# payloads is installed, so the distribution keeps the leanest available
+# binary.
+PACKAGE_NAME="opencode"
+PACKAGE_VERSION="2.2.7"
+PACKAGE_RELEASE="1"
+
+DEPENDENCIES=()
+EXTERNAL_DEPENDENCIES=("curl" "tar" "gzip")
+
+SOURCE_URL="https://github.com/sst/opencode/releases/download/v2.2.7/opencode-linux-x64.tar.gz"
+SOURCE_FILE="opencode-linux-x64.tar.gz"
+SOURCE_HASH="89a6cee227b54bc011179c528a5e63176032462b1a5e21723b616801cddc2ca7"
+
+BUILD_STYLE="custom"
+LANGUAGE="c"
+FALLBACK_ALLOWED=0
+STATIC_BUILD=0
+
+# Static musl release, used as the size comparison candidate.
+OPENCODE_MUSL_URL="https://github.com/sst/opencode/releases/download/v2.2.7/opencode-linux-x64-musl.tar.gz"
+OPENCODE_MUSL_FILE="opencode-linux-x64-musl.tar.gz"
+OPENCODE_MUSL_HASH="c1801a36bf61e03eafac8d7f4521a200e4d3cd76cf43b36621cb78b460b851ee"
+
+find_opencode_binary() {
+    local root="$1" candidate
+    candidate="$(find "$root" -maxdepth 3 -type f -name opencode -perm -u+x -print -quit 2>/dev/null)"
+    [ -n "$candidate" ] || die "opencode binary not found below $root"
+    printf '%s\n' "$candidate"
+}
+
+build() {
+    # Bun produces the upstream binary; it cannot be linked against dietlibc.
+    # Fail before doing any work; the glibc pass installs the prebuilt payload.
+    case "$(basename "$CC")" in
+        dietgcc|dietcc)
+            die "opencode is a prebuilt Bun binary; Bun cannot link dietlibc (glibc/musl only)"
+            ;;
+    esac
+
+    # cast.sh extracted the glibc release into the current directory.
+    local glibc_bin musl_archive musl_dir musl_bin payload artifact
+    glibc_bin="$(find_opencode_binary "$PWD")"
+
+    musl_archive=$(fetch_source "$OPENCODE_MUSL_URL" "$OPENCODE_MUSL_HASH" "$OPENCODE_MUSL_FILE")
+    musl_dir="$BUILD_ROOT/$PACKAGE_NAME/musl"
+    extract_source "$musl_archive" "$musl_dir"
+    musl_bin="$(find_opencode_binary "$musl_dir")"
+
+    if [ "$(stat -c %s "$musl_bin")" -lt "$(stat -c %s "$glibc_bin")" ]; then
+        payload="$musl_bin"
+        artifact="musl-static"
+    else
+        payload="$glibc_bin"
+        artifact="glibc-dynamic"
+    fi
+    log "opencode: installing $artifact payload ($(stat -c %s "$payload") bytes)"
+
+    install -D -m755 "$payload" "$DESTDIR/usr/bin/opencode"
+    mkdir -p "$DESTDIR/usr/share/opencode"
+    {
+        printf 'artifact=%s\n' "$artifact"
+        printf 'version=%s\n' "$PACKAGE_VERSION"
+    } > "$DESTDIR/usr/share/opencode/PAYLOAD"
+}

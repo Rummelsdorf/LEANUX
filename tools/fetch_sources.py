@@ -54,6 +54,7 @@ class Spell:
     path: Path
     version: str = ""
     url: str = ""
+    file: str = ""
     hash: str = ""
     build_style: str = ""
     fallback_allowed: str = "0"
@@ -102,6 +103,7 @@ def parse_spell(path: Path) -> Spell:
         path=path,
         version=meta.get("PACKAGE_VERSION", ""),
         url=_expand(meta.get("SOURCE_URL", ""), meta),
+        file=_expand(meta.get("SOURCE_FILE", ""), meta),
         hash=meta.get("SOURCE_HASH", ""),
         build_style=meta.get("BUILD_STYLE", ""),
         fallback_allowed=meta.get("FALLBACK_ALLOWED", "0"),
@@ -262,7 +264,7 @@ def fetch_one(
         result.seconds = time.monotonic() - started
         return result
 
-    destination = SOURCES_DIR / source_filename(spell.url)
+    destination = SOURCES_DIR / (spell.file or source_filename(spell.url))
     result.filename = destination.name
     expected = spell.hash.strip()
     pinned = bool(expected) and expected != "PLACEHOLDER_HASH"

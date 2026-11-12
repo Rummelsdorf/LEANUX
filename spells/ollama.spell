@@ -1,0 +1,100 @@
+# Ollama – local LLM runtime (Go + C/C++ native payload)
+#
+# Ollama's Go binary uses CGO and its inference payload is C++ (llama.cpp).
+# Neither can be linked against dietlibc, so the dietlibc pass fails early.
+# FALLBACK_ALLOWED=0 keeps that failure honest and avoids compiling the
+# expensive native payload twice; the glibc pass builds it once.  glibc is the
+# only libc Ollama supports upstream.
+PACKAGE_NAME="ollama"
+PACKAGE_VERSION="0.40.16"
+PACKAGE_RELEASE="1"
+
+DEPENDENCIES=()
+EXTERNAL_DEPENDENCIES=("gcc" "g++" "make" "cmake" "curl" "go")
+
+SOURCE_URL="https://github.com/ollama/ollama/archive/refs/tags/v0.40.16.tar.gz"
+SOURCE_FILE="ollama-v0.40.16.tar.gz"
+SOURCE_HASH="296dc8dd88a617335d9132412179f11926d266941d53a4727917fd18ac675053"
+
+BUILD_STYLE="cmake"
+LANGUAGE="c++"
+FALLBACK_ALLOWED=0
+STATIC_BUILD=0
+
+# llama.cpp release pinned by Ollama's LLAMA_CPP_VERSION file (b12177).  The
+# archive is extracted locally and passed to CMake via OLLAMA_LLAMA_CPP_SOURCE
+# so the build does not need a git clone at configure time.
+OLLAMA_LLAMA_CPP_VERSION="b12177"
+OLLAMA_LLAMA_CPP_URL="https://github.com/ggml-org/llama.cpp/archive/refs/tags/b12177.tar.gz"
+OLLAMA_LLAMA_CPP_HASH="f50a52f4ba45dd5b4b906db97cf230ce2e3b1117a0b9017411322ecba63eea13"
+
+build() {
+    # dietlibc has neither a C++ standard library nor the CGO runtime Ollama
+    # needs.  Fail before the (expensive) native build; the glibc pass builds
+    # the payload exactly once.
+    case "$(basename "$CC")" in
+        dietgcc|dietcc)
+            die "ollama requires a C++ runtime and CGO; dietlibc is not supported"
+            ;;
+    esac
+
+    # Go 1.26.10+ is required by go.mod; bootstrap the pinned toolchain.
+    "$LEANUX_ROOT/bootstrap/go.sh"
+    export PATH="$LEANUX_ROOT/tools/host/go/bin:$PATH"
+    export CGO_ENABLED=1
+    export GOTOOLCHAIN=local
+    export GOCACHE="${GOCACHE:-$BUILD_ROOT/.gocache}"
+    export GOPATH="${GOPATH:-$BUILD_ROOT/.gopath}"
+    export GOPROXY="${GOPROXY:-https://goproxy.cn,https://proxy.golang.org,direct}"
+    mkdir -p "$GOCACHE" "$GOPATH"
+
+    # Provide the pinned llama.cpp source locally.  Extract it below the
+    # package build directory so --force always starts from a clean tree.
+    local llama_archive llama_src ollama_src
+    ollama_src="$PWD"
+    llama_archive=$(fetch_source "$OLLAMA_LLAMA_CPP_URL" "$OLLAMA_LLAMA_CPP_HASH" "llama.cpp-b12177.tar.gz")
+    llama_src="$BUILD_ROOT/$PACKAGE_NAME/llama.cpp-b12177-src"
+    extract_source "$llama_archive" "$llama_src"
+    export OLLAMA_LLAMA_CPP_SOURCE="$llama_src"
+
+    # Ollama's compat shim is a small call-site patch plus a set of source
+    # files that the nested llama/server build links itself.  With a local
+    # source override the patch is not applied automatically, so apply the
+    # pinned, idempotent patch here before configuring.
+    log "Applying Ollama llama.cpp compat patch"
+    (
+        cd "$llama_src"
+        cmake \
+            -DPATCH_DIR="$ollama_src/llama/compat" \
+            -DPATCH_LABEL=llama/compat \
+            -P "$ollama_src/cmake/apply-git-patches.cmake"
+    )
+
+    # cast.sh exports -static flags for C packages; CMake and cgo must not
+    # inherit them.
+    unset CFLAGS CPPFLAGS LDFLAGS
+
+    local cxx="${CXX:-g++}"
+    log "Configuring Ollama (C=$CC, CXX=$cxx, CPU-only)"
+    # Ollama's superbuild stages the native payload inside its own build tree
+    # and installs it from there with an absolute build-tree prefix.  DESTDIR
+    # must not leak into that nested install, otherwise the payload ends up
+    # under $DESTDIR/<absolute build dir>.  Install directly into the staged
+    # prefix instead.
+    local install_prefix="$DESTDIR/usr"
+    unset DESTDIR
+    cmake -S . -B build \
+        -DCMAKE_BUILD_TYPE=Release \
+        -DCMAKE_INSTALL_PREFIX="$install_prefix" \
+        -DCMAKE_C_COMPILER="$CC" \
+        -DCMAKE_CXX_COMPILER="$cxx" \
+        -DOLLAMA_VERSION="v${PACKAGE_VERSION}" \
+        -DOLLAMA_LLAMA_BACKENDS="" \
+        -DOLLAMA_MLX_BACKENDS="" \
+        -DOLLAMA_LLAMA_CPP_SKIP_COMPAT_PATCH=ON
+
+    log "Building Ollama (parallel=${OLLAMA_JOBS:-2})"
+    cmake --build build --parallel "${OLLAMA_JOBS:-2}"
+
+    cmake --install build
+}

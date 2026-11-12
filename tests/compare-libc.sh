@@ -1,9 +1,11 @@
 #!/usr/bin/env bash
 # tests/compare-libc.sh – build a glibc variant of every package that passed the
-# dietlibc matrix and compare the installed payload sizes.
+# dietlibc matrix and compare the installed payload sizes.  With
+# --include-failed, packages whose dietlibc build failed are measured too.
 #
 # Usage:
 #   ./tests/compare-libc.sh                    # all dietlibc PASS packages
+#   ./tests/compare-libc.sh --include-failed   # also build glibc for dietlibc failures
 #   ./tests/compare-libc.sh --only zlib,xz     # selected packages
 #   ./tests/compare-libc.sh --force            # rebuild glibc variants
 #   ./tests/compare-libc.sh --timeout 600      # per-package timeout (seconds)
@@ -32,6 +34,7 @@ REPORT_DIR="${REPORT_DIR:-$ROOT/reports}"
 MATRIX_TSV=""
 ONLY=""
 FORCE=0
+INCLUDE_FAILED=0
 TIMEOUT="${COMPARE_TIMEOUT:-1200}"
 export JOBS="${JOBS:-4}"
 
@@ -53,6 +56,7 @@ while [ $# -gt 0 ]; do
             ONLY="$2"; shift 2 ;;
         --force) FORCE=1; shift ;;
         --reuse) FORCE=0; shift ;;
+        --include-failed) INCLUDE_FAILED=1; shift ;;
         --timeout)
             [ $# -ge 2 ] || { echo "ERROR: --timeout needs a value" >&2; exit 2; }
             TIMEOUT="$2"; shift 2 ;;
@@ -84,7 +88,13 @@ fi
 mkdir -p "$LOG_DIR" "$STAGING_DIR" "$BUILD_ROOT" "$SOURCES_DIR"
 
 mapfile -t PACKAGES < <(
-    awk -F'\t' '!/^#/ && $3 ~ /^PASS/ && $4 == "dietlibc" { print $2 }' "$MATRIX_TSV"
+    if [ "$INCLUDE_FAILED" = "1" ]; then
+        awk -F'\t' '!/^#/ && (($3 ~ /^PASS/ && $4 == "dietlibc") ||
+                             ($3 ~ /^(FAIL|TIMEOUT)$/ && $4 ~ /^dietlibc/)) { print $2 }' \
+            "$MATRIX_TSV"
+    else
+        awk -F'\t' '!/^#/ && $3 ~ /^PASS/ && $4 == "dietlibc" { print $2 }' "$MATRIX_TSV"
+    fi
 )
 
 if [ -n "$ONLY" ]; then
@@ -163,6 +173,8 @@ skipped=0
 cached=0
 
 echo "[compare] $total dietlibc PASS packages, mode=$MODE, timeout=${TIMEOUT}s, JOBS=$JOBS" >&2
+[ "$INCLUDE_FAILED" = "1" ] && \
+    echo "[compare] including packages that failed the dietlibc build" >&2
 echo "[compare] glibc staging: $STAGING_DIR" >&2
 echo "[compare] glibc builds:  $BUILD_ROOT" >&2
 render_comparison
@@ -192,7 +204,22 @@ for pkg in "${PACKAGES[@]}"; do
         continue
     fi
 
-    if [ ! -f "$diet_stage/.built" ]; then
+    diet_result="PASS (dietlibc)"
+    diet_bytes=0
+    diet_files=0
+
+    if [ -f "$diet_stage/.built" ]; then
+        diet_measure="$(measure_stage "$diet_stage")"
+        diet_bytes="${diet_measure%%$'\t'*}"
+        diet_files="${diet_measure##*$'\t'}"
+        [ -n "$diet_bytes" ] || diet_bytes=0
+        [ -n "$diet_files" ] || diet_files=0
+    elif [ "$INCLUDE_FAILED" = "1" ]; then
+        # No dietlibc stage exists because the package cannot be built with
+        # dietlibc.  Still measure the glibc variant so the report documents
+        # which libc the distribution has to use.
+        diet_result="FAIL (dietlibc)"
+    else
         printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
             "$pkg" "PASS (dietlibc)" "SKIP" "0" "" "" "" "0" "" "0" \
             "dietlibc stage missing" "" >> "$TSV"
@@ -203,13 +230,7 @@ for pkg in "${PACKAGES[@]}"; do
         continue
     fi
 
-    diet_measure="$(measure_stage "$diet_stage")"
-    diet_bytes="${diet_measure%%$'\t'*}"
-    diet_files="${diet_measure##*$'\t'}"
-    [ -n "$diet_bytes" ] || diet_bytes=0
-    [ -n "$diet_files" ] || diet_files=0
-
-    if [ "$diet_bytes" -eq 0 ]; then
+    if [ "$diet_result" = "PASS (dietlibc)" ] && [ "$diet_bytes" -eq 0 ]; then
         printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
             "$pkg" "PASS (dietlibc)" "SKIP" "$diet_bytes" "" "" "" \
             "$diet_files" "" "0" "no compiled payload" "" >> "$TSV"
@@ -282,7 +303,7 @@ for pkg in "${PACKAGES[@]}"; do
     fi
 
     printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
-        "$pkg" "PASS (dietlibc)" "$glibc_result" "$diet_bytes" "$glibc_bytes" \
+        "$pkg" "$diet_result" "$glibc_result" "$diet_bytes" "$glibc_bytes" \
         "$diff" "$ratio" "$diet_files" "$glibc_files" "$seconds" \
         "$reason" "$logrel" >> "$TSV"
 

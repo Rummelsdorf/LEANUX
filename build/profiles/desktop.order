@@ -65,3 +65,7 @@ vlc
 bash
 tor
 mate
+
+# AI runtimes and agents (prebuilt/Go payloads; glibc only)
+ollama
+opencode

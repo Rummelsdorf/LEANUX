@@ -117,40 +117,44 @@ def passes(row: dict[str, str], key: str) -> bool:
 
 
 def render(rows: list[dict[str, str]]) -> list[str]:
-    compared = [
-        row for row in rows if passes(row, "diet_result") and passes(row, "glibc_result")
-    ]
+    compared = [row for row in rows if passes(row, "glibc_result")]
+    paired = [row for row in compared if int(row["diet_bytes"] or 0) > 0]
     lines = [
         "## Size comparison: dietlibc vs glibc",
         "",
-        "Both variants are built from the same source and spells with static "
-        "linking (`-static`).  The numbers are installed payload sizes "
+        "Both variants are built from the same source and spells.  C packages "
+        "are linked statically (`-static`), so the glibc variant carries the C "
+        "library inside every executable and the difference is expected to be "
+        "large.  Packages that cannot use dietlibc at all are installed with "
+        "their normal dynamic runtime.  The numbers are installed payload sizes "
         "(executables, libraries and data; docs and pkg-config files are "
-        "excluded).  For glibc, the statically linked C library is part of "
-        "each executable, so the difference is expected to be large.",
+        "excluded).  A dash in the dietlibc column means the package cannot be "
+        "built with dietlibc; only its glibc payload is measured.",
         "",
         "| Package | dietlibc | glibc | Difference | Ratio | Files (diet/glibc) |",
         "|---|---:|---:|---:|---:|---:|",
     ]
     diet_total = glibc_total = files_diet_total = files_glibc_total = 0
     for row in compared:
-        diet = int(row["diet_bytes"])
-        glibc = int(row["glibc_bytes"])
-        diet_total += diet
-        glibc_total += glibc
+        diet = int(row["diet_bytes"] or 0)
+        glibc = int(row["glibc_bytes"] or 0)
+        lines.append(
+            f"| `{row['package']}` | {human_size(diet) if diet else '–'} | "
+            f"{human_size(glibc)} | "
+            f"{diff_text(row) if diet else '–'} | {ratio_text(row)} | "
+            f"{row['diet_files'] or '–'}/{row['glibc_files']} |"
+        )
+    for row in paired:
+        diet_total += int(row["diet_bytes"] or 0)
+        glibc_total += int(row["glibc_bytes"] or 0)
         files_diet_total += int(row["diet_files"] or 0)
         files_glibc_total += int(row["glibc_files"] or 0)
-        lines.append(
-            f"| `{row['package']}` | {human_size(diet)} | {human_size(glibc)} | "
-            f"{diff_text(row)} | {ratio_text(row)} | "
-            f"{row['diet_files']}/{row['glibc_files']} |"
-        )
-    if compared:
+    if paired:
         diff = glibc_total - diet_total
         sign = "+" if diff > 0 else ""
         total_ratio = f"{glibc_total / diet_total:.2f}×" if diet_total else "–"
         lines.append(
-            f"| **Total ({len(compared)})** | **{human_size(diet_total)}** | "
+            f"| **Total ({len(paired)})** | **{human_size(diet_total)}** | "
             f"**{human_size(glibc_total)}** | **{sign}{human_size(diff)}** | "
             f"**{total_ratio}** | "
             f"{files_diet_total}/{files_glibc_total} |"

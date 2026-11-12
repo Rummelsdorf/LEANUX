@@ -13,7 +13,7 @@ spell explicitly allows a fallback (`FALLBACK_ALLOWED=1`).
 | Spell/dependency engine | **working** (topological ordering, cycle and missing-dependency detection, dependency staging) |
 | dietlibc compile + static link | **verified** |
 | zlib 1.3.1 built with dietlibc | **verified** (static library + linked test program run) |
-| CLEANUX package port | **spells and graph imported** – 70-package world order; see `PORTING.md` |
+| CLEANUX package port | **spells and graph imported** – 73-package world order; see `PORTING.md` |
 | xz, libpng, pixman built with dietlibc | **verified** |
 | Full desktop/AI package set | **in progress** – 53 ported spells still need their archives pinned |
 | Live ISO | **not built yet** – only after the package set compiles |
@@ -82,6 +82,7 @@ make compile-all
 ./tests/compile-all.sh --only zlib,xz,libpng
 ./tests/compile-all.sh --compare          # enable the glibc size comparison
 ./tests/compare-libc.sh                   # comparison only, using the last matrix
+./tests/compare-libc.sh --include-failed  # also measure glibc for dietlibc failures
 ```
 
 Results are written under `reports/`:
@@ -110,6 +111,12 @@ host compiler (`--libc glibc`) in separate `sysroot-glibc/` and
 variants are linked statically; the reported number is the installed payload
 (executables, libraries and data, excluding docs, locales and pkg-config
 files).  The size section is appended to `compile-matrix.md` automatically.
+
+`--include-failed` additionally builds the glibc variant of packages whose
+dietlibc build failed.  Such packages (for example the Go/C++ Ollama runtime and
+the prebuilt Bun OpenCode binary) appear with a dash in the dietlibc column, so
+the report records that glibc is mandatory for them rather than silently
+omitting them.
 
 ## localrepo – package source index
 
@@ -241,7 +248,7 @@ reports/          generated fetch/compile reports and build logs
 dependency graph. The generated world order is `build/world.order`:
 
 ```bash
-make plan-world     # inspect the 70-package order
+make plan-world     # inspect the 73-package order
 make world          # build it (long; most sources are downloaded on demand)
 ```
 

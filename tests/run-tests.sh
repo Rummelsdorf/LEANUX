@@ -29,6 +29,27 @@ check "compile-all.sh syntax" bash -n tests/compile-all.sh
 check "compare-libc.sh syntax" bash -n tests/compare-libc.sh
 check "build-release.sh syntax" bash -n tests/build-release.sh
 check "fetch_sources.py syntax" python3 -m py_compile tools/fetch_sources.py
+check "verify_sources.py syntax" python3 -m py_compile tools/verify_sources.py
+
+# SOURCE_FILE lets a spell cache an archive under a unique name when the
+# upstream URL basename is ambiguous or not descriptive.
+TMP_SRC=$(mktemp -d)
+cat > "$TMP_SRC/renamed.spell" <<'EOF'
+PACKAGE_NAME="renamed"
+SOURCE_URL="https://example.invalid/v1.2.3.tar.gz"
+SOURCE_FILE="renamed-1.2.3.tar.gz"
+SOURCE_HASH=""
+EOF
+check "SOURCE_FILE overrides the cached archive name" \
+    python3 -c "
+import sys
+from pathlib import Path
+sys.path.insert(0, 'tools')
+from fetch_sources import parse_spell
+spell = parse_spell(Path('$TMP_SRC/renamed.spell'))
+sys.exit(0 if spell.file == 'renamed-1.2.3.tar.gz' else 1)
+"
+rm -rf "$TMP_SRC"
 check "compile_report.py syntax" python3 -m py_compile tools/compile_report.py
 check "compare_report.py syntax" python3 -m py_compile tools/compare_report.py
 check "select_libc.py syntax" python3 -m py_compile tools/select_libc.py

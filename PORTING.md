@@ -17,7 +17,7 @@ behaviour.
 | Spell metadata | 65 CLEANUX spells (version, URL, description) |
 | Added transitive dependencies | `libpthread-stubs`, `libfontenc`, `libxkbfile`, `libxklavier` |
 | Compatibility shim | `dietcompat` spell + `compat/dietcompat.c` |
-| World order | 70 packages in `build/world.order` |
+| World order | 73 packages in `build/world.order` (later additions: Ollama, OpenCode) |
 | Source archives | 15 CLEANUX archives copied into `sources/` |
 | Pinned hashes | 14 new archives added to `build/sources.lock.toml` |
 | Generator | `tools/import_cleanux_spells.py` (rerunnable) |

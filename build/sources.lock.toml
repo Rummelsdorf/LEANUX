@@ -103,3 +103,34 @@ name = "xz"
 version = "5.6.3"
 url = "https://github.com/tukaani-project/xz/releases/download/v5.6.3/xz-5.6.3.tar.xz"
 sha256 = "db0590629b6f0fa36e74aea5f9731dc6f8df068ce7b7bafa45301832a5eebc3a"
+
+# AI runtimes and agents (glibc-only payloads; see spells/ollama.spell and
+# spells/opencode.spell).
+
+[[source]]
+name = "ollama"
+version = "0.40.16"
+url = "https://github.com/ollama/ollama/archive/refs/tags/v0.40.16.tar.gz"
+file = "ollama-v0.40.16.tar.gz"
+sha256 = "296dc8dd88a617335d9132412179f11926d266941d53a4727917fd18ac675053"
+
+[[source]]
+name = "llama.cpp"
+version = "b12177"
+url = "https://github.com/ggml-org/llama.cpp/archive/refs/tags/b12177.tar.gz"
+file = "llama.cpp-b12177.tar.gz"
+sha256 = "f50a52f4ba45dd5b4b906db97cf230ce2e3b1117a0b9017411322ecba63eea13"
+
+[[source]]
+name = "opencode"
+version = "2.2.7"
+url = "https://github.com/sst/opencode/releases/download/v2.2.7/opencode-linux-x64.tar.gz"
+file = "opencode-linux-x64.tar.gz"
+sha256 = "89a6cee227b54bc011179c528a5e63176032462b1a5e21723b616801cddc2ca7"
+
+[[source]]
+name = "opencode-musl"
+version = "2.2.7"
+url = "https://github.com/sst/opencode/releases/download/v2.2.7/opencode-linux-x64-musl.tar.gz"
+file = "opencode-linux-x64-musl.tar.gz"
+sha256 = "c1801a36bf61e03eafac8d7f4521a200e4d3cd76cf43b36621cb78b460b851ee"

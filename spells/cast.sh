@@ -90,10 +90,11 @@ source_filename() {
 }
 
 fetch_source() {
-    local url="$1" hash="$2"
+    local url="$1" hash="$2" name="${3:-}"
     [ -n "$url" ] || return 0
     mkdir -p "$SOURCES_DIR"
-    local file="$SOURCES_DIR/$(source_filename "$url")"
+    [ -n "$name" ] || name="$(source_filename "$url")"
+    local file="$SOURCES_DIR/$name"
 
     if [ ! -f "$file" ]; then
         log "Fetching $url"
@@ -158,7 +159,7 @@ extract_source() {
 spell_meta() {
     local spell="$1"
     # Only read the simple metadata lines; the build functions are not run here.
-    grep -E '^(PACKAGE_NAME|PACKAGE_VERSION|DEPENDENCIES|EXTERNAL_DEPENDENCIES|FALLBACK_ALLOWED|LANGUAGE|SOURCE_URL|SOURCE_HASH|USE_DIETCOMPAT|STATIC_BUILD)=' "$spell" || true
+    grep -E '^(PACKAGE_NAME|PACKAGE_VERSION|DEPENDENCIES|EXTERNAL_DEPENDENCIES|FALLBACK_ALLOWED|LANGUAGE|SOURCE_URL|SOURCE_FILE|SOURCE_HASH|USE_DIETCOMPAT|STATIC_BUILD)=' "$spell" || true
 }
 
 is_built() {
@@ -345,7 +346,7 @@ build_package() {
         # Reset metadata for this spell.
         PACKAGE_NAME="$pkg"; PACKAGE_VERSION=""; PACKAGE_RELEASE="1"
         DEPENDENCIES=(); EXTERNAL_DEPENDENCIES=(); FALLBACK_ALLOWED=0
-        LANGUAGE="c"; SOURCE_URL=""; SOURCE_HASH=""; USE_DIETCOMPAT=0
+        LANGUAGE="c"; SOURCE_URL=""; SOURCE_FILE=""; SOURCE_HASH=""; USE_DIETCOMPAT=0
         BUILD_STYLE="configure"
 
         # shellcheck disable=SC1090
@@ -353,7 +354,7 @@ build_package() {
 
         if [ -n "$SOURCE_URL" ]; then
             local archive
-            archive=$(fetch_source "$SOURCE_URL" "${SOURCE_HASH:-}")
+            archive=$(fetch_source "$SOURCE_URL" "${SOURCE_HASH:-}" "${SOURCE_FILE:-}")
             extract_source "$archive" "$builddir/src"
             cd "$builddir/src"
         else
@@ -460,7 +461,7 @@ build_package() {
                 rm -rf "$builddir/src"
                 if [ -n "$SOURCE_URL" ]; then
                     local archive
-                    archive=$(fetch_source "$SOURCE_URL" "${SOURCE_HASH:-}")
+                    archive=$(fetch_source "$SOURCE_URL" "${SOURCE_HASH:-}" "${SOURCE_FILE:-}")
                     extract_source "$archive" "$builddir/src"
                     cd "$builddir/src"
                 fi

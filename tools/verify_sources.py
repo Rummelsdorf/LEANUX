@@ -35,9 +35,12 @@ def main():
         name = source["name"]
         expected = source["sha256"]
 
-        archive = SOURCES / Path(
+        # A spell may rename the downloaded archive (SOURCE_FILE) when the
+        # upstream URL does not end in a unique filename.
+        filename = source.get("file") or Path(
             source["url"].split("?")[0]
         ).name
+        archive = SOURCES / filename
 
         if not archive.is_file():
             # The base C library is kept with the repository, not in sources/.
